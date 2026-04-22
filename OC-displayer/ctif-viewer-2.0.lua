@@ -291,6 +291,7 @@ function showMenu(images)
   clearScreen()
 
   while true do
+    term.clear()
     term.setCursor(1, 1)
     term.write("Select an image to display (use arrow keys, Enter to select, ESC to exit):")
     for i, path in ipairs(images) do
@@ -302,10 +303,10 @@ function showMenu(images)
       end
     end
 
-    local eventType, _, key = event.pull("key_down", 10)  -- timeout after 10 seconds
+    local eventType, _, key = event.pull("key_down", 5)  -- timeout after 5 seconds
     if not eventType then
       term.setCursor(1, #images + 3)
-      term.write("No input received within 10 seconds, exiting menu.")
+      term.write("No input received within 5 seconds, exiting menu.")
       os.sleep(2)
       return nil
     end
@@ -325,6 +326,11 @@ function main()
   local dir = args[1] or "."
   if not filesystem.exists(dir) or not filesystem.isDirectory(dir) then
     abort("Invalid directory: " .. dir)
+  end
+
+  -- Check for keyboard component
+  if not component.keyboard then
+    abort("No keyboard component found. Please attach a keyboard to the computer.")
   end
 
   local images = scanDirectory(dir)
