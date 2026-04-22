@@ -281,7 +281,7 @@ function showMenu(images)
     term.clear()
     term.setCursor(1, 1)
     term.write("No valid CTIF images found in the directory.")
-    event.pull("key_down")
+    event.pull("key_down", 10)  -- timeout after 10 seconds
     return nil
   end
 
@@ -302,7 +302,13 @@ function showMenu(images)
       end
     end
 
-    local _, _, key = event.pull("key_down")
+    local eventType, _, key = event.pull("key_down", 10)  -- timeout after 10 seconds
+    if not eventType then
+      term.setCursor(1, #images + 3)
+      term.write("No input received within 10 seconds, exiting menu.")
+      os.sleep(2)
+      return nil
+    end
     if key == 200 then -- up
       selected = selected > 1 and selected - 1 or #images
     elseif key == 208 then -- down
@@ -329,15 +335,12 @@ function main()
       break
     end
     displayImage(images[selected])
-    -- Wait for ESC to return to menu
-    while true do
-      local _, _, key = event.pull("key_down")
-      if key == 1 then -- esc
-        break
-      end
+    -- Wait for ESC to return to menu, with timeout
+    local eventType, _, key = event.pull("key_down", 30)  -- timeout after 30 seconds
+    if not eventType or key == 1 then -- esc or timeout
+      resetResolution()
+      clearScreen()
     end
-    resetResolution()
-    clearScreen()
   end
 
   resetResolution()
