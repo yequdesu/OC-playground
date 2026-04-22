@@ -1,17 +1,9 @@
 local component = require("component")
-local event = require("event")
 local gpu = component.gpu
 local os = require("os")
-local term = require("term")
-local unicode = require("unicode")
 local filesystem = require("filesystem")
 
 local args = {...}
-
-function abort(message)
-  print("Error: " .. message)
-  os.exit(1)
-end
 
 function r8(file)
   local byte = file:read(1)
@@ -100,9 +92,79 @@ function loadImage(filename)
 
   for i = 1, 4 do
     if r8(file) ~= hdr[i] then
-      abort("Invalid header.")
+      return nil
     end
   end
+
+  local hdrVersion = r8(file)
+  local platformVariant = r8(file)
+  local platformId = r16(file)
+
+  if hdrVersion > 1 then
+    io.close(file)
+    return nil
+  end
+
+  if platformId ~= 1 or platformVariant ~= 0 then
+    io.close(file)
+    return nil
+  end
+
+  data[1] = {}
+  data[2] = {}
+  data[3] = {}
+  data[2][1] = r8(file)
+  data[2][1] = (data[2][1] | (r8(file) << 8))
+  data[2][2] = r8(file)
+  data[2][2] = (data[2][2] | (r8(file) << 8))
+
+  local pw = r8(file)
+  local ph = r8(file)
+  if not (pw == 2 and ph == 4) then
+    io.close(file)
+    return nil
+  end
+
+  data[2][3] = r8(file)
+  if (data[2][3] ~= 4 and data[2][3] ~= 8) or data[2][3] > gpu.getDepth() then
+    io.close(file)
+    return nil
+  end
+
+  local ccEntrySize = r8(file)
+  local customColors = r16(file)
+  if customColors > 0 and ccEntrySize ~= 3 then
+    io.close(file)
+    return nil
+  end
+  if customColors > 16 then
+    io.close(file)
+    return nil
+  end
+
+  for p = 0, customColors - 1 do
+    local w = r16(file)
+    data[3][p] = w | (r8(file) << 16)
+  end
+
+  local WIDTH = data[2][1]
+  local HEIGHT = data[2][2]
+
+  for y = 0, HEIGHT - 1 do
+    for x = 0, WIDTH - 1 do
+      local j = (y * WIDTH) + x + 1
+      local w = r16(file)
+      if data[2][3] > 4 then
+        data[1][j] = w | (r8(file) << 16)
+      else
+        data[1][j] = w
+      end
+    end
+  end
+
+  io.close(file)
+  return data
+end
 
   local hdrVersion = r8(file)
   local platformVariant = r8(file)
@@ -189,6 +251,7 @@ function drawImage(data, offx, offy)
   local gBG = gpuBG()
   local gFG = gpuFG()
 
+  local unicode = require("unicode")
   local q = {}
   for i = 0, 255 do
     local dat = (i & 0x01) << 7
@@ -248,10 +311,6 @@ function drawImage(data, offx, offy)
   end
 end
 
-function displayImage(path)
-  drawImage(loadImage(path))
-end
-
 function resetResolution()
   local x, y = gpu.maxResolution()
   gpu.setResolution(x, y)
@@ -276,100 +335,126 @@ function scanDirectory(dir)
   return images
 end
 
-function showMenu(images)
-  if #images == 0 then
-    term.clear()
-    term.setCursor(1, 1)
-    term.write("No valid CTIF images found in the directory.")
-    event.pull(10)  -- timeout after 10 seconds
-    return nil
-  end
-
-  local selected = 1
-  local maxW, maxH = gpu.maxResolution()
-  gpu.setResolution(maxW, maxH)
-  clearScreen()
-
-  while true do
-    term.clear()
-    term.setCursor(1, 1)
-    term.write("Select an image to display (use arrow keys, Enter to select, ESC to exit):")
-    for i, path in ipairs(images) do
-      term.setCursor(1, i + 1)
-      if i == selected then
-        term.write("> " .. filesystem.name(path))
-      else
-        term.write("  " .. filesystem.name(path))
-      end
-    end
-
-    local eventType, _, key = event.pull(5)  -- timeout after 5 seconds
-    if not eventType then
-      term.setCursor(1, #images + 3)
-      term.write("No input received within 5 seconds, exiting menu.")
-      os.sleep(2)
-      return nil
-    elseif eventType == "key_down" then
-      if key == 200 then -- up
-        selected = selected > 1 and selected - 1 or #images
-      elseif key == 208 then -- down
-        selected = selected < #images and selected + 1 or 1
-      elseif key == 28 then -- enter
-        return selected
-      elseif key == 1 then -- esc
-        return nil
-      end
-    end
-    -- ignore other events
-  end
+function resetResolution()
+  local x, y = gpu.maxResolution()
+  gpu.setResolution(x, y)
 end
 
-function main()
-  local dir = args[1] or "."
-  if not filesystem.exists(dir) or not filesystem.isDirectory(dir) then
-    abort("Invalid directory: " .. dir)
-  end
+function clearScreen()
+  gpu.setBackground(0, false)
+  gpu.setForeground(16777215, false)
+  local term = require("term")
+  term.clear()
+end
 
-  -- Check for keyboard component
-  if not component.keyboard then
-    abort("No keyboard component found. Please attach a keyboard to the computer.")
-  end
+-- Main Program
+local dir = args[1] or "."
+if not filesystem.exists(dir) or not filesystem.isDirectory(dir) then
+  print("Error: Invalid directory: " .. dir)
+  os.exit(1)
+end
 
-  local images = scanDirectory(dir)
-  if #images == 0 then
-    print("No valid CTIF images found in the directory.")
-    return
-  end
+local images = scanDirectory(dir)
+if #images == 0 then
+  print("No valid CTIF images found.")
+  os.exit(1)
+end
 
-  local current = showMenu(images)
-  if not current then
-    return
-  end
+-- App State
+local appState = {
+  mode = "menu",  -- "menu" 或 "view"
+  currentIndex = 1,
+  images = images,
+  menuIndex = 1
+}
 
-  while true do
-    displayImage(images[current])
-    local eventType, _, key = event.pull(30)  -- timeout after 30 seconds
-    if not eventType then
-      -- timeout, continue showing current image
-    elseif eventType == "key_down" then
-      if key == 200 then -- up arrow, previous image
-        current = current > 1 and current - 1 or #images
-      elseif key == 208 then -- down arrow, next image
-        current = current < #images and current + 1 or 1
-      elseif key == 203 then -- left arrow, return to menu
-        resetResolution()
-        clearScreen()
-        current = showMenu(images)
-        if not current then
-          break
-        end
-      end
-    end
-    -- ignore other events
-  end
-
+local function showMenu()
   resetResolution()
   clearScreen()
+  
+  local term = require("term")
+  local x, y = 80, 25
+  gpu.setResolution(x, y)
+  clearScreen()
+  
+  term.setCursor(1, 1)
+  term.write("CTIF Image Viewer - Select Image")
+  term.setCursor(1, 2)
+  term.write("================================")
+  
+  local startIndex = math.max(1, appState.menuIndex - 10)
+  local endIndex = math.min(#images, startIndex + 20)
+  
+  for i = startIndex, endIndex do
+    local displayRow = i - startIndex + 4
+    term.setCursor(1, displayRow)
+    
+    if i == appState.menuIndex then
+      term.write("> ")
+    else
+      term.write("  ")
+    end
+    
+    term.write(filesystem.name(images[i]))
+  end
+  
+  term.setCursor(1, y)
+  term.write("UP/DOWN: navigate | ENTER: view | LEFT: exit")
 end
 
-main()
+local function showImage(imageIndex)
+  appState.mode = "view"
+  local imageData = loadImage(images[imageIndex])
+  
+  if imageData then
+    drawImage(imageData)
+  end
+end
+
+local function handleMenuKeyDown(keyboard, code)
+  if code == 200 then -- UP
+    appState.menuIndex = appState.menuIndex > 1 and appState.menuIndex - 1 or #images
+  elseif code == 208 then -- DOWN
+    appState.menuIndex = appState.menuIndex < #images and appState.menuIndex + 1 or 1
+  elseif code == 28 then -- ENTER
+    appState.currentIndex = appState.menuIndex
+    showImage(appState.currentIndex)
+  elseif code == 1 then -- ESC
+    os.exit(0)
+  end
+end
+
+local function handleViewKeyDown(keyboard, code)
+  if code == 200 then -- UP
+    appState.currentIndex = appState.currentIndex > 1 and appState.currentIndex - 1 or #images
+    showImage(appState.currentIndex)
+  elseif code == 208 then -- DOWN
+    appState.currentIndex = appState.currentIndex < #images and appState.currentIndex + 1 or 1
+    showImage(appState.currentIndex)
+  elseif code == 203 then -- LEFT
+    appState.mode = "menu"
+    appState.menuIndex = appState.currentIndex
+    showMenu()
+  end
+end
+
+-- Menu Start
+showMenu()
+
+-- Event Loop
+local event = require("event")
+while true do
+  local eventType, keyboard, code = event.pull(1)
+  
+  if eventType == "key_down" then
+    if appState.mode == "menu" then
+      handleMenuKeyDown(keyboard, code)
+      showMenu()
+    elseif appState.mode == "view" then
+      handleViewKeyDown(keyboard, code)
+      if appState.mode == "menu" then
+        showMenu()
+      end
+    end
+  end
+end
