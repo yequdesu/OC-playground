@@ -311,17 +311,6 @@ function drawImage(data, offx, offy)
   end
 end
 
-function resetResolution()
-  local x, y = gpu.maxResolution()
-  gpu.setResolution(x, y)
-end
-
-function clearScreen()
-  gpu.setBackground(0, false) -- black bg.
-  gpu.setForeground(16777215, false) -- white fg.
-  term.clear()
-end
-
 function scanDirectory(dir)
   local images = {}
   for file in filesystem.list(dir) do
@@ -373,9 +362,8 @@ local function showMenu()
   clearScreen()
   
   local term = require("term")
-  local x, y = 80, 25
-  gpu.setResolution(x, y)
-  clearScreen()
+  local maxW, maxH = gpu.maxResolution()
+  gpu.setResolution(maxW, maxH)
   
   term.setCursor(1, 1)
   term.write("CTIF Image Viewer - Select Image")
@@ -398,7 +386,8 @@ local function showMenu()
     term.write(filesystem.name(images[i]))
   end
   
-  term.setCursor(1, y)
+  local _, maxHeight = gpu.maxResolution()
+  term.setCursor(1, maxHeight)
   term.write("UP/DOWN: navigate | ENTER: view | LEFT: exit")
 end
 
