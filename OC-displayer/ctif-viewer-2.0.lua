@@ -328,18 +328,32 @@ function main()
   end
 
   local images = scanDirectory(dir)
+  if #images == 0 then
+    print("No valid CTIF images found in the directory.")
+    return
+  end
+
+  local current = showMenu(images)
+  if not current then
+    return
+  end
 
   while true do
-    local selected = showMenu(images)
-    if not selected then
-      break
-    end
-    displayImage(images[selected])
-    -- Wait for ESC to return to menu, with timeout
+    displayImage(images[current])
     local eventType, _, key = event.pull("key_down", 30)  -- timeout after 30 seconds
-    if not eventType or key == 1 then -- esc or timeout
+    if not eventType then
+      -- timeout, continue showing current image
+    elseif key == 200 then -- up arrow, previous image
+      current = current > 1 and current - 1 or #images
+    elseif key == 208 then -- down arrow, next image
+      current = current < #images and current + 1 or 1
+    elseif key == 203 then -- left arrow, return to menu
       resetResolution()
       clearScreen()
+      current = showMenu(images)
+      if not current then
+        break
+      end
     end
   end
 
