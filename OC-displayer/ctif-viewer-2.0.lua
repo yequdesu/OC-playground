@@ -281,7 +281,7 @@ function showMenu(images)
     term.clear()
     term.setCursor(1, 1)
     term.write("No valid CTIF images found in the directory.")
-    event.pull("key_down", 10)  -- timeout after 10 seconds
+    event.pull(10)  -- timeout after 10 seconds
     return nil
   end
 
@@ -303,22 +303,24 @@ function showMenu(images)
       end
     end
 
-    local eventType, _, key = event.pull("key_down", 5)  -- timeout after 5 seconds
+    local eventType, _, key = event.pull(5)  -- timeout after 5 seconds
     if not eventType then
       term.setCursor(1, #images + 3)
       term.write("No input received within 5 seconds, exiting menu.")
       os.sleep(2)
       return nil
+    elseif eventType == "key_down" then
+      if key == 200 then -- up
+        selected = selected > 1 and selected - 1 or #images
+      elseif key == 208 then -- down
+        selected = selected < #images and selected + 1 or 1
+      elseif key == 28 then -- enter
+        return selected
+      elseif key == 1 then -- esc
+        return nil
+      end
     end
-    if key == 200 then -- up
-      selected = selected > 1 and selected - 1 or #images
-    elseif key == 208 then -- down
-      selected = selected < #images and selected + 1 or 1
-    elseif key == 28 then -- enter
-      return selected
-    elseif key == 1 then -- esc
-      return nil
-    end
+    -- ignore other events
   end
 end
 
@@ -346,21 +348,24 @@ function main()
 
   while true do
     displayImage(images[current])
-    local eventType, _, key = event.pull("key_down", 30)  -- timeout after 30 seconds
+    local eventType, _, key = event.pull(30)  -- timeout after 30 seconds
     if not eventType then
       -- timeout, continue showing current image
-    elseif key == 200 then -- up arrow, previous image
-      current = current > 1 and current - 1 or #images
-    elseif key == 208 then -- down arrow, next image
-      current = current < #images and current + 1 or 1
-    elseif key == 203 then -- left arrow, return to menu
-      resetResolution()
-      clearScreen()
-      current = showMenu(images)
-      if not current then
-        break
+    elseif eventType == "key_down" then
+      if key == 200 then -- up arrow, previous image
+        current = current > 1 and current - 1 or #images
+      elseif key == 208 then -- down arrow, next image
+        current = current < #images and current + 1 or 1
+      elseif key == 203 then -- left arrow, return to menu
+        resetResolution()
+        clearScreen()
+        current = showMenu(images)
+        if not current then
+          break
+        end
       end
     end
+    -- ignore other events
   end
 
   resetResolution()
