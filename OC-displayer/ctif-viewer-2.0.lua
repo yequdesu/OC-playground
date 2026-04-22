@@ -386,10 +386,6 @@ local function handleKeyDown(code)
   end
 end
 
-local function eventHandler(typ, address, char, code)
-  if typ == "key_down" then handleKeyDown(code) end
-end
-
 local function init(dir)
   if not filesystem.exists(dir) or not filesystem.isDirectory(dir) then
     print("Error: Invalid directory: " .. dir)
@@ -403,11 +399,12 @@ local function init(dir)
   end
 
   showBrowser()
-  event.addHandler(eventHandler)
 
   while true do
-    local signal = {computer.pullSignal()}
-    if signal[1] == "exit" then break end
+    local typ, address, char, code = event.pull()
+    if typ == "key_down" then
+      handleKeyDown(code)
+    end
   end
 end
 
