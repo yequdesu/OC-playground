@@ -554,7 +554,14 @@ local function handleKeyDown(code, char)
   -- Update debug info immediately (only when not in CLI mode)
   if not app.cliActive then
     app.lastKeyCode = code
-    app.lastKeyChar = (char and type(char) == "string") and char or ""
+    -- Handle both string and number char
+    if type(char) == "string" then
+      app.lastKeyChar = char
+    elseif type(char) == "number" and char >= 32 then
+      app.lastKeyChar = string.char(char)
+    else
+      app.lastKeyChar = ""
+    end
     app.lastEventType = "key_down"
   end
   
@@ -615,12 +622,15 @@ local function handleKeyDown(code, char)
         app.cliInput = string.sub(app.cliInput, 1, -2)
       end
     else
-      -- Use char directly from event, filter control characters
-      if char and type(char) == "string" and #char > 0 then
-        local byte = string.byte(char)
-        if byte and byte >= 32 then
-          app.cliInput = app.cliInput .. char
-        end
+      -- Use char directly from event - can be string or number
+      local inputChar = ""
+      if type(char) == "string" and #char > 0 then
+        inputChar = char
+      elseif type(char) == "number" and char >= 32 then
+        inputChar = string.char(char)
+      end
+      if #inputChar > 0 then
+        app.cliInput = app.cliInput .. inputChar
       end
     end
     
@@ -752,27 +762,13 @@ local function init(dir)
         if e1 == "key_down" then
           app.lastEventType = "key_down"
           app.lastKeyCode = e4
-          -- Handle various types of e3 (char can be string, number, or nil)
-          local rawChar = e3
-          if type(rawChar) == "number" then
-            app.lastKeyChar = string.char(rawChar)
-          elseif type(rawChar) == "string" then
-            app.lastKeyChar = rawChar
-          else
-            app.lastKeyChar = ""
-          end
+          -- e3 is the character from OpenComputers event
+          app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
           handleKeyDown(e4, e3)
         elseif e1 == "key_up" then
           app.lastEventType = "key_up"
           app.lastKeyCode = e4
-          local rawChar = e3
-          if type(rawChar) == "number" then
-            app.lastKeyChar = string.char(rawChar)
-          elseif type(rawChar) == "string" then
-            app.lastKeyChar = rawChar
-          else
-            app.lastKeyChar = ""
-          end
+          app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
           handleKeyUp(e4, e3)
         elseif e1 == "touch" then
           app.lastEventType = "touch"
