@@ -817,6 +817,12 @@ local function init(dir)
       if app.cliActive then
         if e1 == "key_down" then
           handleKeyDown(e4, e3)
+        elseif e1 == "clipboard" then
+          -- Middle mouse button paste
+          if e3 and type(e3) == "string" then
+            app.cliInput = app.cliInput .. e3
+            drawCLI()
+          end
         end
       else
         -- Always capture and display ALL events for debug when NOT in CLI
