@@ -440,15 +440,6 @@ local function drawCLI()
   end
   
   drawText(2, cliY, prompt .. cursorChar)
-  
-  -- Hint line
-  local hint = "Ctrl: Exit CLI"
-  if app.cliState == "url" then
-    hint = "Enter URL and press ENTER"
-  elseif app.cliState == "filename" then
-    hint = "Enter filename (empty = default)"
-  end
-  drawText(2, cliY + 1, hint)
 end
 
 local function showCLI()
@@ -560,10 +551,12 @@ end
 -- ============================================================
 
 local function handleKeyDown(code, char)
-  -- Update debug info immediately
-  app.lastKeyCode = code
-  app.lastKeyChar = (char and char ~= "" and type(char) == "string") and char or ""
-  app.lastEventType = "key_down"
+  -- Update debug info immediately (only when not in CLI mode)
+  if not app.cliActive then
+    app.lastKeyCode = code
+    app.lastKeyChar = (char and type(char) == "string") and char or ""
+    app.lastEventType = "key_down"
+  end
   
   -- CLI mode input handling
   if app.cliActive then
@@ -581,13 +574,10 @@ local function handleKeyDown(code, char)
       if app.cliState == "command" then
         local cmd = input:lower()
         if cmd == "help" then
-          -- Show help in CLI area
           gpu.setBackground(0x000000)
           gpu.setForeground(0xFFFFFF)
-          fillRect(1, app.screenHeight - 4, app.screenWidth, 3, " ")
-          drawText(2, app.screenHeight - 3, "help - show commands")
-          drawText(2, app.screenHeight - 2, "dl  - download CTIF")
-          drawText(2, app.screenHeight - 1, "q   - quit program")
+          fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
+          drawText(2, app.screenHeight - 2, "help - show commands | dl - download | q - quit")
           app.cliInput = ""
           app.cliState = "command"
           drawCLI()
@@ -615,12 +605,10 @@ local function handleKeyDown(code, char)
         local dest = (app.currentDir or ".") .. "/" .. fname
         local f = io.open(dest, "wb")
         if f then f:close() end
-        -- Refresh directory
         app.images = scanDirectory(app.currentDir or ".")
         hideCLI()
         showBrowser()
       end
-      drawStatusBar()
       return
     elseif code == 14 then -- BACKSPACE
       if #app.cliInput > 0 then
@@ -630,7 +618,6 @@ local function handleKeyDown(code, char)
       -- Use char directly from event, filter control characters
       if char and type(char) == "string" and #char > 0 then
         local byte = string.byte(char)
-        -- Allow printable characters (32-126) and extended ASCII
         if byte and byte >= 32 then
           app.cliInput = app.cliInput .. char
         end
@@ -638,7 +625,6 @@ local function handleKeyDown(code, char)
     end
     
     drawCLI()
-    drawStatusBar()
     return
   end
   
@@ -766,12 +752,27 @@ local function init(dir)
         if e1 == "key_down" then
           app.lastEventType = "key_down"
           app.lastKeyCode = e4
-          app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
+          -- Handle various types of e3 (char can be string, number, or nil)
+          local rawChar = e3
+          if type(rawChar) == "number" then
+            app.lastKeyChar = string.char(rawChar)
+          elseif type(rawChar) == "string" then
+            app.lastKeyChar = rawChar
+          else
+            app.lastKeyChar = ""
+          end
           handleKeyDown(e4, e3)
         elseif e1 == "key_up" then
           app.lastEventType = "key_up"
           app.lastKeyCode = e4
-          app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
+          local rawChar = e3
+          if type(rawChar) == "number" then
+            app.lastKeyChar = string.char(rawChar)
+          elseif type(rawChar) == "string" then
+            app.lastKeyChar = rawChar
+          else
+            app.lastKeyChar = ""
+          end
           handleKeyUp(e4, e3)
         elseif e1 == "touch" then
           app.lastEventType = "touch"
