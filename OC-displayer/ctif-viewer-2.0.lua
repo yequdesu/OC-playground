@@ -253,7 +253,12 @@ local app = {
   downloading = false,
   downloadProgress = 0,
   downloadURL = nil,
-  downloadDest = nil
+  downloadDest = nil,
+  -- GUI input handling
+  guiInputBuffer = "",
+  guiInputActive = false,
+  guiInputState = "idle", -- "idle", "command", "url", "filename"
+  targetURL = ""
 }
 
 local function updateScreenSize()
@@ -263,6 +268,73 @@ end
 
 local function getImageName(path)
   return filesystem.name(path)
+end
+
+-- GUI Input Box Helper
+local function drawInputBox(x, y, w, prompt, buffer)
+  gpu.setBackground(0x111111)
+  gpu.setForeground(0xCCCCCC)
+  gpu.set(x, y, "┌" .. string.rep("─", w - 2) .. "┐")
+  gpu.set(x, y + 1, "│")
+  gpu.set(x + w - 1, y + 1, "│")
+  gpu.set(x, y + 2, "└" .. string.rep("─", w - 2) .. "┘")
+  gpu.setForeground(0xAAAAAA)
+  gpu.set(x + 2, y, prompt)
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(x + 2, y + 1, buffer .. "_")
+end
+
+local function drawCenterModal(w, h, title, content, showInput, inputPrompt, inputBuffer)
+  local sw, sh = app.screenWidth, app.screenHeight
+  local bx = math.floor((sw - w) / 2)
+  local by = math.floor((sh - h) / 2)
+  gpu.setBackground(0x000000)
+  gpu.fill(bx, by, w, h, " ")
+  gpu.setBackground(0x3366CC)
+  gpu.setForeground(0xFFFFFF)
+  gpu.fill(bx, by, w, 1, " ")
+  local tlen = unicode.wlen(title)
+  gpu.set(bx + math.floor((w - tlen) / 2), by, title)
+  gpu.setBackground(0x1E1E1E)
+  local lines = {}
+  for line in content:gmatch("[^\n]+") do table.insert(lines, line) end
+  local y = by + 2
+  for i, line in ipairs(lines) do
+    if i > h - 3 then break end
+    gpu.setForeground(0xFFFFFF)
+    gpu.set(bx + 2, y + i - 1, line)
+  end
+  if showInput then
+    local iw = w - 4
+    local ix = bx + 2
+    local iy = by + h - 3
+    drawInputBox(ix, iy, iw, inputPrompt, inputBuffer)
+  end
+end
+
+local function showCLI()
+  app.cliActive = true
+  app.guiInputActive = true
+  app.guiInputBuffer = ""
+  app.guiInputState = "command"
+  drawCenterModal(50, 15, "CLI Command", "Type command and press ENTER:\n  help - show commands\n  dl  - download\n  q   - exit", true, "Command> ", app.guiInputBuffer)
+end
+
+local function showURLInput()
+  app.guiInputState = "url"
+  app.guiInputBuffer = ""
+  drawCenterModal(60, 12, "Download", "Enter CTIF URL to download:", true, "URL> ", app.guiInputBuffer)
+end
+
+local function showFilenameInput(defaultName)
+  app.guiInputState = "filename"
+  app.guiInputBuffer = defaultName or ""
+  drawCenterModal(50, 12, "Save As", "Enter filename (Enter for default):", true, "File: ", app.guiInputBuffer)
+end
+
+local function hideInput()
+  app.guiInputActive = false
+  app.guiInputState = "idle"
 end
 
 local function drawHeader()
@@ -364,6 +436,79 @@ local function scrollToSelection()
 end
 
 local function handleKeyDown(code)
+  -- GUI Input handling when active (for CLI)
+  if app.guiInputActive then
+    if app.guiInputState == "command" or app.guiInputState == "url" or app.guiInputState == "filename" then
+      if code == 28 then -- ENTER
+        local input = app.guiInputBuffer
+        hideInput()
+        if app.guiInputState == "command" then
+          processCLIInput(input:lower())
+        elseif app.guiInputState == "url" then
+          if input and input ~= "" then
+            app.targetURL = input
+            -- start download flow
+            app.downloadURL = input
+            app.downloading = true
+            -- simulate download progress
+            for p = 0, 100, 10 do
+              app.downloadProgress = p
+              renderProgressCenter(p, "Downloading " .. input .. "...")
+            end
+            app.downloading = false
+            renderProgressCenter(100, "Download finished")
+            -- ask filename
+            local def = deriveFilenameFromURL(input)
+            showFilenameInput(def)
+          else
+            showBrowser()
+          end
+        elseif app.guiInputState == "filename" then
+          local fname = (input == "" or input == nil) and deriveFilenameFromURL(app.targetURL) or input
+          local dest = (app.currentDir or ".") .. "/" .. fname
+          local f = io.open(dest, "wb")
+          if f then f:close() end
+          app.images = scanDirectory(app.currentDir or ".")
+          showBrowser()
+        end
+        return
+      elseif code == 1 then -- ESC
+        hideInput()
+        showBrowser()
+        return
+      end
+      -- handle character input
+      if code == 14 then -- BACKSPACE
+        app.guiInputBuffer = string.sub(app.guiInputBuffer, 1, -2)
+      elseif code >= 2 and code <= 10 or code >= 11 and code <= 12 or code >= 15 and code <= 25 then
+        -- printable ASCII range (rough approximation)
+        local ch = string.char(code)
+        if code >= 16 and code <= 25 then ch = string.char(code + 96) end -- a-z
+        if code >= 30 and code <= 38 then ch = string.char(code + 96) end -- number row might need shift for symbols, simplified
+        if code == 2 then ch = "!"
+        elseif code == 3 then ch = "@"
+        elseif code == 4 then ch = "#"
+        elseif code == 5 then ch = "$"
+        elseif code == 6 then ch = "%"
+        elseif code == 7 then ch = "^"
+        elseif code == 8 then ch = "&"
+        elseif code == 9 then ch = "*"
+        elseif code == 10 then ch = "("
+        elseif code == 11 then ch = ")"
+        app.guiInputBuffer = app.guiInputBuffer .. ch
+      end
+      -- redraw the modal
+      if app.guiInputState == "command" then
+        drawCenterModal(50, 15, "CLI Command", "Type command and press ENTER:\n  help - show commands\n  dl  - download\n  q   - exit", true, "Command> ", app.guiInputBuffer)
+      elseif app.guiInputState == "url" then
+        drawCenterModal(60, 12, "Download", "Enter CTIF URL to download:", true, "URL> ", app.guiInputBuffer)
+      elseif app.guiInputState == "filename" then
+        drawCenterModal(50, 12, "Save As", "Enter filename (Enter for default):", true, "File: ", app.guiInputBuffer)
+      end
+      return
+    end
+  end
+
   if app.mode == "browser" then
     if code == 200 then
       app.selectedIndex = app.selectedIndex > 1 and app.selectedIndex - 1 or #app.images
@@ -465,60 +610,67 @@ end
 
 local function showCLI()
   app.cliActive = true
-  -- simple prompt using IO; keep UI lightweight
-  io.write("\nCLI> ")
-  local input = io.read()
-  if input == nil then input = "" end
-  app.cliActive = false
-  processCLIInput(input:lower())
+  app.guiInputActive = true
+  app.guiInputBuffer = ""
+  app.guiInputState = "command"
+  drawCenterModal(50, 15, "CLI Command", "Type command and press ENTER:\n  help - show commands\n  dl  - download\n  q   - exit", true, "Command> ", app.guiInputBuffer)
 end
 
 local function showHelpCLI()
-  print("Available commands:")
-  print("  help - show this help")
-  print("  dl   - start download flow (URL input and simulated download)")
-  print("  q    - exit (CLI only)")
+  drawCenterModal(50, 12, "Help", "Available commands:\n  help - show this help\n  dl  - download\n  q   - exit\n\nPress any key to close...", false)
 end
 
-local function beginDownloadFlow()
-  print("Enter download URL:")
-  io.write(": ")
-  local url = io.read()
-  if not url or url == "" then
-    print("No URL provided. Returning to browser.")
-    return
-  end
+local function beginDownloadFlow(url)
   app.downloadURL = url
-  -- simulate download progress to center
   app.downloading = true
   for p = 0, 100, 10 do
     app.downloadProgress = p
-    renderProgressCenter(p, "Downloading...")
+    renderProgressCenter(p, "Downloading " .. url .. "...")
   end
   app.downloading = false
   renderProgressCenter(100, "Download finished")
-  -- ask for file name
-  io.write("\nEnter output filename (empty for default): ")
-  local name = io.read()
-  local fname
-  if name == nil or name == "" then
-    fname = deriveFilenameFromURL(url)
-  else
-    fname = name
-  end
-  -- save a placeholder file to current directory
-  local dest = (app.currentDir or ".") .. "/" .. fname
-  local f = io.open(dest, "wb")
-  if f then f:close() end
-  -- refresh directory view
-  app.images = scanDirectory(app.currentDir or ".")
-  showBrowser()
-  print("Downloaded to: " .. dest)
+  app.guiInputActive = true
+  local def = deriveFilenameFromURL(url)
+  showFilenameInput(def)
 end
 
-local function processCLIInput(input)
-  if input == "help" then showHelpCLI() end
-  if input == "dl" then beginDownloadFlow() end
-  if input == "q" then os.exit(0) end
-  if input == nil or input == "" then return end
+-- Process GUI input (called from event handler when guiInputActive)
+local function processGUIInput(input)
+  local cmd = input:lower()
+  if cmd == "help" then
+    showHelpCLI()
+  elseif cmd == "dl" then
+    showURLInput()  -- switch to URL input state
+  elseif cmd == "q" then
+    os.exit(0)
+  end
+end
+
+-- Simplified key handler for printable characters (for CLI input)
+local function handleCharInput(code)
+  if code == 14 then -- BACKSPACE
+    if #app.guiInputBuffer > 0 then
+      app.guiInputBuffer = string.sub(app.guiInputBuffer, 1, -2)
+    end
+  elseif code == 28 then -- ENTER
+    -- handled in handleKeyDown
+    return
+  elseif code == 1 then -- ESC
+    hideInput()
+    showBrowser()
+    return
+  else
+    -- Try to map scan code to ASCII character
+    local ch = nil
+    if code >= 2 and code <= 10 then ch = "!\"#$%&'()*+,-./" -- shifted numbers
+    elseif code == 11 then ch = "0"
+    elseif code >= 12 and code <= 25 then ch = string.char(code + 94) -- @ to Z (a-z offset)
+    elseif code >= 30 and code <= 38 then ch = string.char(code + 96) -- 1-9
+    elseif code == 39 then ch = "0"
+    elseif code >= 40 and code <= 41 then ch = string.char(code + 96) -- ;= and :<
+    end
+    if ch then
+      app.guiInputBuffer = app.guiInputBuffer .. ch
+    end
+  end
 end
