@@ -318,7 +318,7 @@ local function drawStatusBar()
   if app.mode == "browser" then
     drawText(2, y, "UP/DOWN: Navigate  ENTER: View  C: CLI")
   elseif app.mode == "viewer" then
-    drawText(2, y, "UP/DOWN: Prev/Next  ESC: Exit")
+    drawText(2, y, "UP/DOWN: Prev/Next  RIGHT/ESC: Exit")
   elseif app.mode == "cli" then
     drawText(2, y, "CLI Mode - Enter command  Ctrl: Exit CLI")
   end
@@ -724,7 +724,7 @@ local function handleKeyDown(code, char)
     elseif code == 208 then -- DOWN (next)
       app.viewIndex = app.viewIndex < #app.images and app.viewIndex + 1 or 1
       showViewer()
-    elseif code == 1 then -- ESC
+    elseif code == 205 or code == 1 then -- RIGHT or ESC
       showBrowser()
     end
   end
