@@ -512,18 +512,69 @@ end
 local function beginDownload(url)
   app.cliState = "downloading"
   
-  -- Simulate download progress
-  for p = 0, 100, 10 do
-    drawProgressModal(p, "Downloading...")
+  -- Check internet card
+  local internet = component.internet
+  if not internet then
+    gpu.setBackground(0x000000)
+    gpu.setForeground(0xFFFFFF)
+    fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
+    drawText(2, app.screenHeight - 2, "Error: No internet card")
+    event.pull(2)
+    app.cliState = "command"
+    app.cliInput = ""
+    drawCLI()
+    return
   end
   
-  drawProgressModal(100, "Complete!")
+  local function download(url, path)
+    local handle, openReason = filesystem.open(path, "w")
+    if not handle then
+      return false, "Cannot open file: " .. tostring(openReason)
+    end
   
-  -- Ask for filename
-  local defName = deriveFilenameFromURL(url)
-  app.cliState = "filename"
-  app.cliInput = defName
-  app.targetURL = url
+    local request, requestReason = internet.request(url)
+    if not request then
+      handle:close()
+      return false, requestReason or "Request failed"
+    end
+    
+    while true do
+      local chunk = request.read(math.huge)
+      if chunk then
+        handle:write(chunk)
+      else
+        break
+      end
+    end
+    
+    handle:close()
+    request:close()
+    return true
+  end
+  
+  -- Draw download progress
+  gpu.setBackground(0x000000)
+  gpu.setForeground(0x00FF00)
+  fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
+  drawText(2, app.screenHeight - 2, "Downloading...")
+  
+  local destPath = filesystem.concat(app.currentDir, deriveFilenameFromURL(url))
+  local success, reason = download(url, destPath)
+  
+  if success then
+    gpu.setForeground(0x00FF00)
+    fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
+    drawText(2, app.screenHeight - 2, "Download complete!")
+    app.images = scanDirectory(app.currentDir)
+  else
+    gpu.setForeground(0xFF0000)
+    fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
+    drawText(2, app.screenHeight - 2, "Error: " .. tostring(reason))
+  end
+  
+  event.pull(2)
+  app.cliState = "command"
+  app.cliInput = ""
   drawCLI()
 end
 
@@ -581,12 +632,22 @@ local function handleKeyDown(code, char)
       if app.cliState == "command" then
         local cmd = input:lower()
         if cmd == "help" then
-          gpu.setBackground(0x000000)
+          gpu.setBackground(0x1E1E1E)
           gpu.setForeground(0xFFFFFF)
-          fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
-          drawText(2, app.screenHeight - 2, "help - show commands | dl - download | q - quit")
+          fillRect(1, 2, app.screenWidth, 8, " ")
+          drawText(2, 2, "=== CTIF Viewer CLI Help ===")
+          drawText(2, 4, "help  - Show this help message")
+          drawText(2, 5, "dl    - Download CTIF from URL")
+          drawText(2, 6, "q     - Quit program")
+          drawText(2, 8, "Press any key to continue...")
           app.cliInput = ""
           app.cliState = "command"
+          -- Wait for key press before returning to CLI
+          local waiting = true
+          while waiting do
+            local e1, e2, e3, e4 = event.pull("key_down")
+            waiting = false
+          end
           drawCLI()
         elseif cmd == "dl" then
           app.cliState = "url"
