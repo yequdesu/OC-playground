@@ -818,10 +818,21 @@ local function init(dir)
         if e1 == "key_down" then
           handleKeyDown(e4, e3)
         elseif e1 == "clipboard" then
-          -- Right mouse button paste (clipboard event)
+          -- Middle mouse button paste (fallback)
           if e3 and type(e3) == "string" then
             app.cliInput = app.cliInput .. e3
             drawCLI()
+          end
+        elseif e1 == "touch" and (e5 or 0) == 1 then
+          -- Right mouse button paste - check clipboard via component
+          local clipboard = component.list("clipboard")()
+          if clipboard then
+            local clipboardProxy = component.proxy(clipboard)
+            local text = clipboardProxy and clipboardProxy.get and clipboardProxy.get()
+            if text and type(text) == "string" then
+              app.cliInput = app.cliInput .. text
+              drawCLI()
+            end
           end
         end
       else
