@@ -253,7 +253,9 @@ local app = {
   guiInputBuffer = "",
   guiInputActive = false,
   guiInputState = "idle",
-  targetURL = ""
+  targetURL = "",
+  lastKeyCode = 0,
+  lastKeyChar = ""
 }
 
 local function updateScreenSize()
@@ -400,6 +402,10 @@ local function drawStatusBar()
   gpu.setForeground(COLORS.textSecondary)
   fillRect(1, y, app.screenWidth, 1, " ")
   drawText(2, y, "UP/DOWN: Navigate  ENTER: View  C: CLI")
+  -- Debug: show last key code
+  local debug = "Key:" .. tostring(app.lastKeyCode) .. " Char:" .. tostring(app.lastKeyChar)
+  local dx = app.screenWidth - unicode.wlen(debug) - 2
+  drawText(dx, y, debug)
 end
 
 local function drawImageList()
@@ -504,7 +510,7 @@ local function processGUIInput(input)
   end
 end
 
-local function handleKeyDown(code)
+local function handleKeyDown(code, char)
   -- GUI Input handling
   if app.guiInputActive then
     if code == 28 then -- ENTER
@@ -538,12 +544,19 @@ local function handleKeyDown(code)
       if #app.guiInputBuffer > 0 then
         app.guiInputBuffer = string.sub(app.guiInputBuffer, 1, -2)
       end
-    elseif code >= 30 and code <= 38 then -- 1-9
-      app.guiInputBuffer = app.guiInputBuffer .. string.char(code + 96)
-    elseif code == 39 then -- 0
-      app.guiInputBuffer = app.guiInputBuffer .. "0"
-    elseif code >= 16 and code <= 25 then -- a-z
-      app.guiInputBuffer = app.guiInputBuffer .. string.char(code + 96)
+    -- Character input handling for CLI
+    local ch = nil
+    if code >= 30 and code <= 38 then ch = string.char(code + 96) -- 1-9
+    elseif code == 39 then ch = "0"
+    elseif code >= 16 and code <= 25 then ch = string.char(code + 96) -- a-z
+    elseif code == 44 then ch = " " -- space
+    elseif code == 45 then ch = "-"
+    elseif code == 46 then ch = "."
+    elseif code == 47 then ch = "/"
+    elseif code == 43 then ch = "="
+    end
+    if ch then
+      app.guiInputBuffer = app.guiInputBuffer .. ch
     end
     -- Redraw modal
     if app.guiInputState == "command" then
@@ -605,6 +618,8 @@ local function init(dir)
   while true do
     local typ, address, char, code = event.pull()
     if typ == "key_down" then
+      app.lastKeyCode = code
+      app.lastKeyChar = char or ""
       handleKeyDown(code)
     end
   end
