@@ -318,7 +318,7 @@ local function drawStatusBar()
   if app.mode == "browser" then
     drawText(2, y, "UP/DOWN: Navigate  ENTER: View  C: CLI")
   elseif app.mode == "viewer" then
-    drawText(2, y, "LEFT/RIGHT: Prev/Next  ESC: Back")
+    drawText(2, y, "UP/DOWN: Prev/Next  ESC: Exit")
   elseif app.mode == "cli" then
     drawText(2, y, "CLI Mode - Enter command  Ctrl: Exit CLI")
   end
@@ -718,13 +718,13 @@ local function handleKeyDown(code, char)
       showCLI()
     end
   elseif app.mode == "viewer" then
-    if code == 200 then -- LEFT
+    if code == 200 then -- UP (prev)
       app.viewIndex = app.viewIndex > 1 and app.viewIndex - 1 or #app.images
       showViewer()
-    elseif code == 208 then -- RIGHT
+    elseif code == 208 then -- DOWN (next)
       app.viewIndex = app.viewIndex < #app.images and app.viewIndex + 1 or 1
       showViewer()
-    elseif code == 203 or code == 1 then -- LEFT or ESC
+    elseif code == 1 then -- ESC
       showBrowser()
     end
   end
@@ -818,21 +818,10 @@ local function init(dir)
         if e1 == "key_down" then
           handleKeyDown(e4, e3)
         elseif e1 == "clipboard" then
-          -- Middle mouse button paste (fallback)
+          -- Middle mouse button paste
           if e3 and type(e3) == "string" then
             app.cliInput = app.cliInput .. e3
             drawCLI()
-          end
-        elseif (e1 == "touch" or e1 == "drag") and (e5 or 0) == 1 then
-          -- Right mouse button paste - check clipboard via component
-          local clipboard = component.list("clipboard")()
-          if clipboard then
-            local clipboardProxy = component.proxy(clipboard)
-            local text = clipboardProxy and clipboardProxy.get and clipboardProxy.get()
-            if text and type(text) == "string" then
-              app.cliInput = app.cliInput .. text
-              drawCLI()
-            end
           end
         end
       else
