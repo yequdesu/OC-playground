@@ -823,6 +823,16 @@ local function init(dir)
             app.cliInput = app.cliInput .. e3
             drawCLI()
           end
+        elseif e1 == "touch" and (e5 or 0) == 1 then
+          -- Right mouse button paste
+          local clipboard = require("clipboard")
+          if clipboard then
+            local text = clipboard.get()
+            if text and type(text) == "string" then
+              app.cliInput = app.cliInput .. text
+              drawCLI()
+            end
+          end
         end
       else
         -- Always capture and display ALL events for debug when NOT in CLI
