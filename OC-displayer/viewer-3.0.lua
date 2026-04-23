@@ -259,7 +259,8 @@ local app = {
   
   -- Cursor blink
   cursorBlink = true,
-  lastCursorTime = 0
+  lastCursorTime = 0,
+  lastStatusBarTime = 0,
 }
 
 -- ============================================================
@@ -667,7 +668,7 @@ local function handleKeyDown(code, char)
     elseif code == 28 then -- ENTER
       app.viewIndex = app.selectedIndex
       showViewer()
-    elseif code == 67 or code == 99 then -- C
+    elseif code == 46 or (char and (char == "c" or char == "C")) then -- C key (46) or char 'c'/'C'
       showCLI()
     end
   elseif app.mode == "viewer" then
@@ -737,15 +738,26 @@ local function init(dir)
   while true do
     -- Cursor blink timer
     local now = computer.uptime()
+    local needsRedraw = false
+    
     if app.cliActive and now - app.lastCursorTime > 0.5 then
       app.cursorBlink = not app.cursorBlink
       app.lastCursorTime = now
       if app.cliActive then drawCLI() end
     end
     
+    -- Periodic status bar refresh to keep debug info visible
+    if now - app.lastStatusBarTime > 1.0 then
+      app.lastStatusBarTime = now
+      drawStatusBar()
+    end
+    
     -- Pull events
     local e1, e2, e3, e4, e5, e6 = event.pull(0.1)
     if e1 then
+      -- Reset status bar timer on any event
+      app.lastStatusBarTime = now
+      
       if e1 == "key_down" then
         handleKeyDown(e4, e3)
       elseif e1 == "touch" or e1 == "drag" then
