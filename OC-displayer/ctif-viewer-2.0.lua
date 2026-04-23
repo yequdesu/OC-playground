@@ -544,19 +544,21 @@ local function handleKeyDown(code, char)
       if #app.guiInputBuffer > 0 then
         app.guiInputBuffer = string.sub(app.guiInputBuffer, 1, -2)
       end
-    -- Character input handling for CLI
-    local ch = nil
-    if code >= 30 and code <= 38 then ch = string.char(code + 96) -- 1-9
-    elseif code == 39 then ch = "0"
-    elseif code >= 16 and code <= 25 then ch = string.char(code + 96) -- a-z
-    elseif code == 44 then ch = " " -- space
-    elseif code == 45 then ch = "-"
-    elseif code == 46 then ch = "."
-    elseif code == 47 then ch = "/"
-    elseif code == 43 then ch = "="
-    end
-    if ch then
-      app.guiInputBuffer = app.guiInputBuffer .. ch
+    else
+      -- Character input handling for CLI
+      local ch = nil
+      if code >= 30 and code <= 38 then ch = string.char(code + 96) -- 1-9
+      elseif code == 39 then ch = "0"
+      elseif code >= 16 and code <= 25 then ch = string.char(code + 96) -- a-z
+      elseif code == 44 then ch = " " -- space
+      elseif code == 45 then ch = "-"
+      elseif code == 46 then ch = "."
+      elseif code == 47 then ch = "/"
+      elseif code == 43 then ch = "="
+      end
+      if ch then
+        app.guiInputBuffer = app.guiInputBuffer .. ch
+      end
     end
     -- Redraw modal
     if app.guiInputState == "command" then
