@@ -7,6 +7,7 @@ local filesystem = require("filesystem")
 local computer = require("computer")
 
 local args = {...}
+local os = require("os")
 
 local function r8(file)
   local byte = file:read(1)
@@ -245,7 +246,14 @@ local app = {
   scrollOffset = 0,
   maxVisibleItems = 0,
   screenWidth = 0,
-  screenHeight = 0
+  screenHeight = 0,
+  -- Phase 1 CLI state
+  cliBuffer = "",
+  cliActive = false,
+  downloading = false,
+  downloadProgress = 0,
+  downloadURL = nil,
+  downloadDest = nil
 }
 
 local function updateScreenSize()
@@ -370,8 +378,12 @@ local function handleKeyDown(code)
     elseif code == 28 then
       app.viewIndex = app.selectedIndex
       showViewer()
-    elseif code == 1 then
-      computer.pushSignal("exit")
+    end
+    -- Phase 1: trigger CLI with C key (best-effort; ASCII 'C' / 'c' support)
+    if code == 67 or code == 99 then
+      -- enter CLI mode
+      app.cliActive = true
+      showCLI()
     end
   elseif app.mode == "viewer" then
     if code == 200 then
@@ -393,6 +405,7 @@ local function init(dir)
   end
 
   app.images = scanDirectory(dir)
+  app.currentDir = dir
   if #app.images == 0 then
     print("No valid CTIF images found.")
     os.exit(1)
@@ -410,3 +423,102 @@ end
 
 local dir = args[1] or "/"
 init(dir)
+
+-- Phase 1: Simple CLI and placeholders for download flow
+local function deriveFilenameFromURL(url)
+  local last = url:match(".*/([^/?#]+)$") or "download.ctif"
+  local name, ext = last:match("([^%.]+)%.([^%.]+)$")
+  local ts = tostring(os.time())
+  if ext then
+    return (name or "download") .. "_" .. ts .. "." .. ext
+  else
+    return last .. "_" .. ts
+  end
+end
+
+local function renderProgressCenter(percent, caption)
+  percent = math.max(0, math.min(100, percent or 0))
+  local w, h = app.screenWidth, app.screenHeight
+  local bw = math.floor(w * 0.5)
+  local bh = 3
+  local x = math.floor((w - bw) / 2)
+  local y = math.floor((h - bh) / 2)
+  -- simple overlay
+  gpu.setBackground(0x111111)
+  for dy = 0, bh - 1 do
+    gpu.set(x, y + dy, string.rep(" ", bw))
+  end
+  local barW = bw - 4
+  local filled = math.floor((percent / 100) * barW)
+  gpu.setBackground(0x333333)
+  gpu.setForeground(0xFFFFFF)
+  if filled > 0 then
+    gpu.set(x + 2, y + 1, string.rep("█", filled))
+  end
+  if bw - 4 > filled then
+    gpu.set(x + 2 + filled, y + 1, string.rep(" ", (barW - filled)))
+  end
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(x + 2, y, caption or "Downloading… 0%")
+  return
+end
+
+local function showCLI()
+  app.cliActive = true
+  -- simple prompt using IO; keep UI lightweight
+  io.write("\nCLI> ")
+  local input = io.read()
+  if input == nil then input = "" end
+  app.cliActive = false
+  processCLIInput(input:lower())
+end
+
+local function showHelpCLI()
+  print("Available commands:")
+  print("  help - show this help")
+  print("  dl   - start download flow (URL input and simulated download)")
+  print("  q    - exit (CLI only)")
+end
+
+local function beginDownloadFlow()
+  print("Enter download URL:")
+  io.write(": ")
+  local url = io.read()
+  if not url or url == "" then
+    print("No URL provided. Returning to browser.")
+    return
+  end
+  app.downloadURL = url
+  -- simulate download progress to center
+  app.downloading = true
+  for p = 0, 100, 10 do
+    app.downloadProgress = p
+    renderProgressCenter(p, "Downloading...")
+  end
+  app.downloading = false
+  renderProgressCenter(100, "Download finished")
+  -- ask for file name
+  io.write("\nEnter output filename (empty for default): ")
+  local name = io.read()
+  local fname
+  if name == nil or name == "" then
+    fname = deriveFilenameFromURL(url)
+  else
+    fname = name
+  end
+  -- save a placeholder file to current directory
+  local dest = (app.currentDir or ".") .. "/" .. fname
+  local f = io.open(dest, "wb")
+  if f then f:close() end
+  -- refresh directory view
+  app.images = scanDirectory(app.currentDir or ".")
+  showBrowser()
+  print("Downloaded to: " .. dest)
+end
+
+local function processCLIInput(input)
+  if input == "help" then showHelpCLI() end
+  if input == "dl" then beginDownloadFlow() end
+  if input == "q" then os.exit(0) end
+  if input == nil or input == "" then return end
+end
