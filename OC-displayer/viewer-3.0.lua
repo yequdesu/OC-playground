@@ -823,7 +823,7 @@ local function init(dir)
             app.cliInput = app.cliInput .. e3
             drawCLI()
           end
-        elseif e1 == "touch" and (e5 or 0) == 1 then
+        elseif (e1 == "touch" or e1 == "drag") and (e5 or 0) == 1 then
           -- Right mouse button paste - check clipboard via component
           local clipboard = component.list("clipboard")()
           if clipboard then
