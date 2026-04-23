@@ -338,33 +338,57 @@ local function renderProgressCenter(percent, caption)
   gpu.set(x + 2, y, caption or "Downloading… 0%")
 end
 
--- GUI functions
+-- GUI functions - CLI at bottom like nano
 local function showCLI()
   app.guiInputActive = true
   app.guiInputBuffer = ""
   app.guiInputState = "command"
-  drawCenterModal(50, 15, "CLI Command", "Type command and press ENTER:\n  help - show commands\n  dl  - download\n  q   - exit", true, "Command> ", app.guiInputBuffer)
+  -- Draw CLI at bottom (nano style)
+  local y = app.screenHeight - 2
+  gpu.setBackground(0x000000)
+  gpu.setForeground(0xFFFFFF)
+  fillRect(1, y, app.screenWidth, 2, " ")
+  -- Command prompt
+  gpu.set(2, y, "Command> " .. app.guiInputBuffer .. "_")
+  -- Hint
+  local hint = "Ctrl+C:Exit help:dl:q"
+  gpu.set(app.screenWidth - unicode.wlen(hint) - 1, y + 1, hint)
 end
 
 local function showHelpCLI()
-  drawCenterModal(50, 12, "Help", "Available commands:\n  help - show this help\n  dl  - download\n  q   - exit\n\nPress ESC to close...", false)
+  app.guiInputActive = true
+  app.guiInputState = "help"
+  local y = app.screenHeight - 2
+  gpu.setBackground(0x000000)
+  gpu.setForeground(0xFFFFFF)
+  fillRect(1, y, app.screenWidth, 2, " ")
+  gpu.set(2, y, "Help: help dl q | Press any key...")
 end
 
 local function showURLInput()
   app.guiInputState = "url"
   app.guiInputBuffer = ""
-  drawCenterModal(60, 12, "Download", "Enter CTIF URL to download:", true, "URL> ", app.guiInputBuffer)
+  local y = app.screenHeight - 2
+  gpu.setBackground(0x000000)
+  gpu.setForeground(0xFFFFFF)
+  fillRect(1, y, app.screenWidth, 2, " ")
+  gpu.set(2, y, "URL> " .. app.guiInputBuffer .. "_")
 end
 
 local function showFilenameInput(defaultName)
   app.guiInputState = "filename"
   app.guiInputBuffer = defaultName or ""
-  drawCenterModal(50, 12, "Save As", "Enter filename (Enter for default):", true, "File: ", app.guiInputBuffer)
+  local y = app.screenHeight - 2
+  gpu.setBackground(0x000000)
+  gpu.setForeground(0xFFFFFF)
+  fillRect(1, y, app.screenWidth, 2, " ")
+  gpu.set(2, y, "File: " .. app.guiInputBuffer .. "_")
 end
 
 local function hideInput()
   app.guiInputActive = false
   app.guiInputState = "idle"
+  drawStatusBar()
 end
 
 local function deriveFilenameFromURL(url)
@@ -519,20 +543,26 @@ local function processGUIInput(input)
   end
 end
 
-local function handleKeyDown(code, char)
-  -- GUI Input handling
+local function handleKeyDown(code)
+  -- GUI Input handling (CLI at bottom)
   if app.guiInputActive then
+    -- Ctrl+C (code 29) exits CLI
+    if code == 29 then
+      hideInput()
+      showBrowser()
+      return
+    end
+    
     if code == 28 then -- ENTER
       local input = app.guiInputBuffer
+      hideInput()
       if app.guiInputState == "command" then
-        hideInput()
         processGUIInput(input)
       elseif app.guiInputState == "url" then
         if input and input ~= "" then
           app.targetURL = input
           beginDownloadFlow(input)
         else
-          hideInput()
           showBrowser()
         end
       elseif app.guiInputState == "filename" then
@@ -541,11 +571,12 @@ local function handleKeyDown(code, char)
         local f = io.open(dest, "wb")
         if f then f:close() end
         app.images = scanDirectory(app.currentDir or ".")
-        hideInput()
+        showBrowser()
+      elseif app.guiInputState == "help" then
         showBrowser()
       end
       return
-    elseif code == 1 then -- ESC
+    elseif code == 1 then -- ESC (same as Ctrl+C)
       hideInput()
       showBrowser()
       return
@@ -554,7 +585,7 @@ local function handleKeyDown(code, char)
         app.guiInputBuffer = string.sub(app.guiInputBuffer, 1, -2)
       end
     else
-      -- Character input handling for CLI
+      -- Character input handling for CLI (extended)
       local ch = nil
       if code >= 30 and code <= 38 then ch = string.char(code + 96) -- 1-9
       elseif code == 39 then ch = "0"
@@ -564,19 +595,24 @@ local function handleKeyDown(code, char)
       elseif code == 46 then ch = "."
       elseif code == 47 then ch = "/"
       elseif code == 43 then ch = "="
+      elseif code >= 26 and code <= 38 then ch = string.char(code + 96) -- more chars
       end
       if ch then
         app.guiInputBuffer = app.guiInputBuffer .. ch
       end
     end
-    -- Redraw modal
+    
+    -- Redraw CLI at bottom
     if app.guiInputState == "command" then
-      drawCenterModal(50, 15, "CLI Command", "Type command and press ENTER:\n  help - show commands\n  dl  - download\n  q   - exit", true, "Command> ", app.guiInputBuffer)
+      showCLI()
     elseif app.guiInputState == "url" then
-      drawCenterModal(60, 12, "Download", "Enter CTIF URL to download:", true, "URL> ", app.guiInputBuffer)
+      showURLInput()
     elseif app.guiInputState == "filename" then
-      drawCenterModal(50, 12, "Save As", "Enter filename (Enter for default):", true, "File: ", app.guiInputBuffer)
+      showFilenameInput(app.guiInputBuffer)
+    elseif app.guiInputState == "help" then
+      showHelpCLI()
     end
+    drawStatusBar()
     return
   end
 
