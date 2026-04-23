@@ -255,7 +255,11 @@ local app = {
   guiInputState = "idle",
   targetURL = "",
   lastKeyCode = 0,
-  lastKeyChar = ""
+  lastKeyChar = "",
+  lastEventType = "",
+  lastTouchX = 0,
+  lastTouchY = 0,
+  lastTouchButton = 0
 }
 
 local function updateScreenSize()
@@ -402,8 +406,13 @@ local function drawStatusBar()
   gpu.setForeground(COLORS.textSecondary)
   fillRect(1, y, app.screenWidth, 1, " ")
   drawText(2, y, "UP/DOWN: Navigate  ENTER: View  C: CLI")
-  -- Debug: show last key code
-  local debug = "Key:" .. tostring(app.lastKeyCode) .. " Char:" .. tostring(app.lastKeyChar)
+  -- Debug: show last event info
+  local debug = ""
+  if app.lastEventType == "touch" then
+    debug = "Touch:" .. app.lastTouchX .. "," .. app.lastTouchY .. " Btn:" .. app.lastTouchButton
+  else
+    debug = "Key:" .. app.lastKeyCode .. " Char:" .. tostring(app.lastKeyChar)
+  end
   local dx = app.screenWidth - unicode.wlen(debug) - 2
   drawText(dx, y, debug)
 end
@@ -602,6 +611,28 @@ local function handleKeyDown(code, char)
   end
 end
 
+-- Touch/Mouse handler
+local function handleTouch(x, y, button)
+  app.lastTouchX = x
+  app.lastTouchY = y
+  app.lastTouchButton = button
+  drawStatusBar()
+  
+  -- If in browser mode, check if touch is on an image list item
+  if app.mode == "browser" then
+    local startY = 3
+    if y >= startY and y < startY + app.maxVisibleItems then
+      local idx = app.scrollOffset + (y - startY + 1)
+      if idx >= 1 and idx <= #app.images then
+        app.selectedIndex = idx
+        drawImageList()
+        drawStatusBar()
+      end
+    end
+  end
+end
+
+-- Main event loop with full event capture
 local function init(dir)
   if not filesystem.exists(dir) or not filesystem.isDirectory(dir) then
     print("Error: Invalid directory: " .. dir)
@@ -618,11 +649,29 @@ local function init(dir)
   showBrowser()
 
   while true do
-    local typ, address, char, code = event.pull()
-    if typ == "key_down" then
-      app.lastKeyCode = code
-      app.lastKeyChar = char or ""
-      handleKeyDown(code)
+    -- Capture all event types (key_down, touch, drag, scroll, etc.)
+    local e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12 = event.pull()
+    app.lastEventType = e1
+    
+    if e1 == "key_down" then
+      app.lastKeyCode = e4
+      app.lastKeyChar = e3 or ""
+      handleKeyDown(e4)
+    elseif e1 == "touch" or e1 == "drag" then
+      -- e3 = x, e4 = y, e5 = button
+      handleTouch(e3, e4, e5 or 0)
+    elseif e1 == "scroll" then
+      -- e4 = direction (positive/negative)
+      if app.mode == "browser" then
+        if e4 > 0 then -- scroll down
+          app.selectedIndex = app.selectedIndex > 1 and app.selectedIndex - 1 or #app.images
+        else -- scroll up
+          app.selectedIndex = app.selectedIndex < #app.images and app.selectedIndex + 1 or 1
+        end
+        scrollToSelection()
+        drawImageList()
+        drawStatusBar()
+      end
     end
   end
 end
