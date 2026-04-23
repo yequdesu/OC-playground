@@ -320,7 +320,7 @@ local function drawStatusBar()
   elseif app.mode == "viewer" then
     drawText(2, y, "LEFT/RIGHT: Prev/Next  ESC: Back")
   elseif app.mode == "cli" then
-    drawText(2, y, "CLI Mode - Enter command  Ctrl+C: Exit CLI")
+    drawText(2, y, "CLI Mode - Enter command  Ctrl: Exit CLI")
   end
   
   -- Right side: debug info
@@ -442,10 +442,8 @@ local function drawCLI()
   drawText(2, cliY, prompt .. cursorChar)
   
   -- Hint line
-  local hint = "Ctrl+C:Exit CLI"
-  if app.cliState == "command" then
-    hint = "Commands: help, dl, q | Ctrl+C:Exit"
-  elseif app.cliState == "url" then
+  local hint = "Ctrl: Exit CLI"
+  if app.cliState == "url" then
     hint = "Enter URL and press ENTER"
   elseif app.cliState == "filename" then
     hint = "Enter filename (empty = default)"
@@ -754,39 +752,47 @@ local function init(dir)
     -- Pull events
     local e1, e2, e3, e4, e5, e6 = event.pull(0.1)
     if e1 then
-      -- Reset status bar timer on any event and update debug info
+      -- Reset status bar timer on any event
       app.lastStatusBarTime = now
       
-      -- Always capture and display ALL events for debug
-      if e1 == "key_down" then
-        app.lastEventType = "key_down"
-        app.lastKeyCode = e4
-        app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
-        handleKeyDown(e4, e3)
-      elseif e1 == "key_up" then
-        app.lastEventType = "key_up"
-        app.lastKeyCode = e4
-        app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
-        handleKeyUp(e4, e3)
-      elseif e1 == "touch" then
-        app.lastEventType = "touch"
-        app.lastTouchX = e3
-        app.lastTouchY = e4
-        app.lastTouchButton = e5 or 0
-        handleTouch(e3, e4, e5 or 0)
-      elseif e1 == "drag" then
-        app.lastEventType = "drag"
-        app.lastTouchX = e3
-        app.lastTouchY = e4
-        app.lastTouchButton = e5 or 0
-        handleTouch(e3, e4, e5 or 0)
-      elseif e1 == "scroll" then
-        app.lastEventType = "scroll"
-        handleScroll(e4)
+      -- In CLI mode, don't update debug info or redraw status bar (they would overwrite CLI input)
+      -- Just pass events to handler
+      if app.cliActive then
+        if e1 == "key_down" then
+          handleKeyDown(e4, e3)
+        end
+      else
+        -- Always capture and display ALL events for debug when NOT in CLI
+        if e1 == "key_down" then
+          app.lastEventType = "key_down"
+          app.lastKeyCode = e4
+          app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
+          handleKeyDown(e4, e3)
+        elseif e1 == "key_up" then
+          app.lastEventType = "key_up"
+          app.lastKeyCode = e4
+          app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
+          handleKeyUp(e4, e3)
+        elseif e1 == "touch" then
+          app.lastEventType = "touch"
+          app.lastTouchX = e3
+          app.lastTouchY = e4
+          app.lastTouchButton = e5 or 0
+          handleTouch(e3, e4, e5 or 0)
+        elseif e1 == "drag" then
+          app.lastEventType = "drag"
+          app.lastTouchX = e3
+          app.lastTouchY = e4
+          app.lastTouchButton = e5 or 0
+          handleTouch(e3, e4, e5 or 0)
+        elseif e1 == "scroll" then
+          app.lastEventType = "scroll"
+          handleScroll(e4)
+        end
+        
+        -- Always redraw status bar after any event when NOT in CLI
+        drawStatusBar()
       end
-      
-      -- Always redraw status bar after any event
-      drawStatusBar()
     end
   end
 end
