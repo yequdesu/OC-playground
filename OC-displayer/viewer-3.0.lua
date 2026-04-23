@@ -318,7 +318,7 @@ local function drawStatusBar()
   if app.mode == "browser" then
     drawText(2, y, "UP/DOWN: Navigate  ENTER: View  C: CLI")
   elseif app.mode == "viewer" then
-    drawText(2, y, "UP/DOWN: Prev/Next  RIGHT/ESC: Exit")
+    drawText(2, y, "UP/DOWN: Prev/Next  LEFT: Exit")
   elseif app.mode == "cli" then
     drawText(2, y, "CLI Mode - Enter command  Ctrl: Exit CLI")
   end
@@ -512,69 +512,11 @@ end
 local function beginDownload(url)
   app.cliState = "downloading"
   
-  -- Check internet card
-  local internet = component.internet
-  if not internet then
-    gpu.setBackground(0x000000)
-    gpu.setForeground(0xFFFFFF)
-    fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
-    drawText(2, app.screenHeight - 2, "Error: No internet card")
-    event.pull(2)
-    app.cliState = "command"
-    app.cliInput = ""
-    drawCLI()
-    return
-  end
-  
-  local function download(url, path)
-    local handle, openReason = filesystem.open(path, "w")
-    if not handle then
-      return false, "Cannot open file: " .. tostring(openReason)
-    end
-  
-    local request, requestReason = internet.request(url)
-    if not request then
-      handle:close()
-      return false, requestReason or "Request failed"
-    end
-    
-    while true do
-      local chunk = request.read(math.huge)
-      if chunk then
-        handle:write(chunk)
-      else
-        break
-      end
-    end
-    
-    handle:close()
-    request:close()
-    return true
-  end
-  
-  -- Draw download progress
-  gpu.setBackground(0x000000)
-  gpu.setForeground(0x00FF00)
-  fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
-  drawText(2, app.screenHeight - 2, "Downloading...")
-  
-  local destPath = filesystem.concat(app.currentDir, deriveFilenameFromURL(url))
-  local success, reason = download(url, destPath)
-  
-  if success then
-    gpu.setForeground(0x00FF00)
-    fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
-    drawText(2, app.screenHeight - 2, "Download complete!")
-    app.images = scanDirectory(app.currentDir)
-  else
-    gpu.setForeground(0xFF0000)
-    fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
-    drawText(2, app.screenHeight - 2, "Error: " .. tostring(reason))
-  end
-  
-  event.pull(2)
-  app.cliState = "command"
-  app.cliInput = ""
+  -- Ask for filename first
+  local defName = deriveFilenameFromURL(url)
+  app.cliState = "filename"
+  app.cliInput = defName
+  app.targetURL = url
   drawCLI()
 end
 
@@ -669,13 +611,72 @@ local function handleKeyDown(code, char)
           drawCLI()
         end
       elseif app.cliState == "filename" then
-        local fname = (input == "" or input == nil) and deriveFilenameFromURL(app.targetURL) or input
-        local dest = (app.currentDir or ".") .. "/" .. fname
-        local f = io.open(dest, "wb")
-        if f then f:close() end
-        app.images = scanDirectory(app.currentDir or ".")
-        hideCLI()
-        showBrowser()
+        local fname = input == "" and deriveFilenameFromURL(app.targetURL) or input
+        local destPath = filesystem.concat(app.currentDir, fname)
+        
+        -- Check internet card
+        local internet = component.internet
+        if not internet then
+          gpu.setBackground(0x000000)
+          gpu.setForeground(0xFF0000)
+          fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
+          drawText(2, app.screenHeight - 2, "Error: No internet card")
+          event.pull(2)
+          app.cliState = "command"
+          app.cliInput = ""
+          drawCLI()
+          return
+        end
+        
+        local function download(url, path)
+          local handle, openReason = filesystem.open(path, "w")
+          if not handle then
+            return false, "Cannot open file: " .. tostring(openReason)
+          end
+        
+          local request, requestReason = internet.request(url)
+          if not request then
+            handle:close()
+            return false, requestReason or "Request failed"
+          end
+          
+          while true do
+            local chunk = request.read(math.huge)
+            if chunk then
+              handle:write(chunk)
+            else
+              break
+            end
+          end
+          
+          handle:close()
+          request:close()
+          return true
+        end
+        
+        gpu.setBackground(0x000000)
+        gpu.setForeground(0x00FF00)
+        fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
+        drawText(2, app.screenHeight - 2, "Downloading...")
+        
+        local success, reason = download(app.targetURL, destPath)
+        
+        if success then
+          gpu.setForeground(0x00FF00)
+          fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
+          drawText(2, app.screenHeight - 2, "Download complete!")
+          app.images = scanDirectory(app.currentDir)
+        else
+          gpu.setForeground(0xFF0000)
+          fillRect(1, app.screenHeight - 3, app.screenWidth, 2, " ")
+          drawText(2, app.screenHeight - 2, "Error: " .. tostring(reason))
+        end
+        
+        event.pull(2)
+        app.cliState = "command"
+        app.cliInput = ""
+        drawCLI()
+        return
       end
       return
     elseif code == 14 then -- BACKSPACE
@@ -724,7 +725,7 @@ local function handleKeyDown(code, char)
     elseif code == 208 then -- DOWN (next)
       app.viewIndex = app.viewIndex < #app.images and app.viewIndex + 1 or 1
       showViewer()
-    elseif code == 205 or code == 1 then -- RIGHT or ESC
+    elseif code == 203 then -- LEFT
       showBrowser()
     end
   end
