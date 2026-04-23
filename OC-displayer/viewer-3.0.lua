@@ -564,12 +564,12 @@ end
 local function handleKeyDown(code, char)
   -- Update debug info immediately
   app.lastKeyCode = code
-  app.lastKeyChar = char or ""
+  app.lastKeyChar = (char and char ~= "" and type(char) == "string") and char or ""
   app.lastEventType = "key_down"
   
   -- CLI mode input handling
   if app.cliActive then
-    -- Ctrl+C (code 29) exits CLI
+    -- Ctrl (code 29) exits CLI
     if code == 29 then
       hideCLI()
       showBrowser()
@@ -629,22 +629,13 @@ local function handleKeyDown(code, char)
         app.cliInput = string.sub(app.cliInput, 1, -2)
       end
     else
-      -- Character input
-      local ch = nil
-      if code >= 30 and code <= 38 then ch = string.char(code + 96) -- 1-9
-      elseif code == 39 then ch = "0"
-      elseif code >= 16 and code <= 25 then ch = string.char(code + 96) -- a-z
-      elseif code == 44 then ch = " "
-      elseif code == 45 then ch = "-"
-      elseif code == 46 then ch = "."
-      elseif code == 47 then ch = "/"
-      elseif code == 43 then ch = "="
-      elseif code == 50 then ch = "`"
-      elseif code >= 51 and code <= 55 then ch = string.char(code + 93) -- [\]^_
-      elseif code >= 56 and code <= 57 then ch = string.char(code + 92) -- {|}
-      end
-      if ch then
-        app.cliInput = app.cliInput .. ch
+      -- Use char directly from event, filter control characters
+      if char and type(char) == "string" and #char > 0 then
+        local byte = string.byte(char)
+        -- Allow printable characters (32-126) and extended ASCII
+        if byte and byte >= 32 then
+          app.cliInput = app.cliInput .. char
+        end
       end
     end
     
@@ -682,6 +673,14 @@ local function handleKeyDown(code, char)
       showBrowser()
     end
   end
+end
+
+-- Handle key_up events for debug display
+local function handleKeyUp(code, char)
+  app.lastKeyCode = code
+  app.lastKeyChar = (char and char ~= "" and type(char) == "string") and char or ""
+  app.lastEventType = "key_up"
+  drawStatusBar()
 end
 
 local function handleTouch(x, y, button)
@@ -747,7 +746,7 @@ local function init(dir)
     end
     
     -- Periodic status bar refresh to keep debug info visible
-    if now - app.lastStatusBarTime > 1.0 then
+    if now - app.lastStatusBarTime > 0.3 then
       app.lastStatusBarTime = now
       drawStatusBar()
     end
@@ -755,16 +754,39 @@ local function init(dir)
     -- Pull events
     local e1, e2, e3, e4, e5, e6 = event.pull(0.1)
     if e1 then
-      -- Reset status bar timer on any event
+      -- Reset status bar timer on any event and update debug info
       app.lastStatusBarTime = now
       
+      -- Always capture and display ALL events for debug
       if e1 == "key_down" then
+        app.lastEventType = "key_down"
+        app.lastKeyCode = e4
+        app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
         handleKeyDown(e4, e3)
-      elseif e1 == "touch" or e1 == "drag" then
+      elseif e1 == "key_up" then
+        app.lastEventType = "key_up"
+        app.lastKeyCode = e4
+        app.lastKeyChar = (e3 and type(e3) == "string" and #e3 > 0) and e3 or ""
+        handleKeyUp(e4, e3)
+      elseif e1 == "touch" then
+        app.lastEventType = "touch"
+        app.lastTouchX = e3
+        app.lastTouchY = e4
+        app.lastTouchButton = e5 or 0
+        handleTouch(e3, e4, e5 or 0)
+      elseif e1 == "drag" then
+        app.lastEventType = "drag"
+        app.lastTouchX = e3
+        app.lastTouchY = e4
+        app.lastTouchButton = e5 or 0
         handleTouch(e3, e4, e5 or 0)
       elseif e1 == "scroll" then
+        app.lastEventType = "scroll"
         handleScroll(e4)
       end
+      
+      -- Always redraw status bar after any event
+      drawStatusBar()
     end
   end
 end
