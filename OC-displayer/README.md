@@ -54,6 +54,9 @@
   java -jar ctif-convert.jar -m OC_TIER_3 -O 0 --resize-mode QUALITY_NATIVE --dither-mode ERROR --dither-level 0.7 -P preview.png -o out.ctif in.png
   ```
 
+  ```
+  java -jar ctif-convert.jar -m oc-tier3 -W 320 -H 200 -o out.ctif in.png
+  ```
   ## Help
 
   To display the full help message, run:
