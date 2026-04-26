@@ -316,7 +316,7 @@ local function handleKeyDown(code, char)
     if type(char) == "string" and #char > 0 then
       inputChar = char
     elseif type(char) == "number" and char >= 32 then
-      inputChar = string.char(char)
+      inputChar = unicode.char(char)
     end
     if #inputChar > 0 then
       app.input = app.input .. inputChar
