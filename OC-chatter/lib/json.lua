@@ -49,30 +49,31 @@ function json.encode(value)
   return "null"
 end
 
--- Store parse functions in json table to avoid LuaJ upvalue issues
 json.null = {}
 
 function json.decode(str)
   if type(str) ~= "string" then return nil, "expected string" end
-  
-  local pos = 1
-  
-  local function skipWs()
+
+  -- MineOS / rxi-style: use a shared pos variable and local parse functions
+  -- Forward declare the main recursive parser
+  local parse, skipWs, parseStr, parseNum
+
+  skipWs = function(str, pos)
     while pos <= #str do
       local ch = str:sub(pos, pos)
       if ch ~= " " and ch ~= "\n" and ch ~= "\r" and ch ~= "\t" then break end
       pos = pos + 1
     end
+    return pos
   end
-  
-  local function parseStringVal()
+
+  parseStr = function(str, pos)
     pos = pos + 1
     local result = {}
     while pos <= #str do
       local ch = str:sub(pos, pos)
       if ch == '"' then
-        pos = pos + 1
-        return table.concat(result)
+        return table.concat(result), pos + 1
       elseif ch == '\\' then
         pos = pos + 1
         ch = str:sub(pos, pos)
@@ -80,7 +81,8 @@ function json.decode(str)
         elseif ch == 'r' then result[#result + 1] = '\r'
         elseif ch == 't' then result[#result + 1] = '\t'
         elseif ch == 'u' then
-          result[#result + 1] = string.char(tonumber(str:sub(pos + 1, pos + 4), 16))
+          local hex = str:sub(pos + 1, pos + 4)
+          result[#result + 1] = string.char(tonumber(hex, 16))
           pos = pos + 4
         else result[#result + 1] = ch end
       else
@@ -88,10 +90,10 @@ function json.decode(str)
       end
       pos = pos + 1
     end
-    return nil
+    return nil, pos
   end
-  
-  local function parseNumVal()
+
+  parseNum = function(str, pos)
     local startPos = pos
     if str:sub(pos, pos) == '-' then pos = pos + 1 end
     while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do pos = pos + 1 end
@@ -104,71 +106,70 @@ function json.decode(str)
       if str:sub(pos, pos) == '+' or str:sub(pos, pos) == '-' then pos = pos + 1 end
       while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do pos = pos + 1 end
     end
-    return tonumber(str:sub(startPos, pos - 1))
+    return tonumber(str:sub(startPos, pos - 1)), pos
   end
-  
-  -- main parse: one recursive function closure
-  local function parse()
-    skipWs()
-    if pos > #str then return nil end
+
+  parse = function(str, pos)
+    pos = skipWs(str, pos)
+    if pos > #str then return nil, pos end
     local ch = str:sub(pos, pos)
-    
+
     if ch == '"' then
-      return parseStringVal()
+      return parseStr(str, pos)
     elseif ch == '{' then
       pos = pos + 1
       local obj = {}
-      skipWs()
-      if str:sub(pos, pos) == '}' then pos = pos + 1 return obj end
+      pos = skipWs(str, pos)
+      if str:sub(pos, pos) == '}' then return obj, pos + 1 end
       while true do
-        skipWs()
-        local key = parseStringVal()
-        if not key then return nil end
-        skipWs()
-        if str:sub(pos, pos) ~= ':' then return nil end
+        pos = skipWs(str, pos)
+        local key
+        key, pos = parseStr(str, pos)
+        if not key then return nil, pos end
+        pos = skipWs(str, pos)
+        if str:sub(pos, pos) ~= ':' then return nil, pos end
         pos = pos + 1
-        local value = parse()
+        local value
+        value, pos = parse(str, pos)
         obj[key] = (value == json.null) and nil or value
-        skipWs()
+        pos = skipWs(str, pos)
         local sep = str:sub(pos, pos)
-        if sep == '}' then pos = pos + 1 return obj
+        if sep == '}' then return obj, pos + 1
         elseif sep == ',' then pos = pos + 1
-        else return nil end
+        else return nil, pos end
       end
     elseif ch == '[' then
       pos = pos + 1
       local arr = {}
-      skipWs()
-      if str:sub(pos, pos) == ']' then pos = pos + 1 return arr end
+      pos = skipWs(str, pos)
+      if str:sub(pos, pos) == ']' then return arr, pos + 1 end
       local i = 1
       while true do
-        local value = parse()
+        local value
+        value, pos = parse(str, pos)
         arr[i] = (value == json.null) and nil or value
         i = i + 1
-        skipWs()
+        pos = skipWs(str, pos)
         local sep = str:sub(pos, pos)
-        if sep == ']' then pos = pos + 1 return arr
+        if sep == ']' then return arr, pos + 1
         elseif sep == ',' then pos = pos + 1
-        else return nil end
+        else return nil, pos end
       end
     elseif ch == 't' and str:sub(pos, pos + 3) == "true" then
-      pos = pos + 4
-      return true
+      return true, pos + 4
     elseif ch == 'f' and str:sub(pos, pos + 4) == "false" then
-      pos = pos + 5
-      return false
+      return false, pos + 5
     elseif ch == 'n' and str:sub(pos, pos + 3) == "null" then
-      pos = pos + 4
-      return json.null
+      return json.null, pos + 4
     elseif ch == '-' or (ch >= '0' and ch <= '9') then
-      return parseNumVal()
+      return parseNum(str, pos)
     end
-    return nil
+    return nil, pos
   end
-  
-  local value = parse()
-  skipWs()
-  if pos <= #str then return nil, "trailing garbage at position " .. pos end
+
+  local value, pos = parse(str, 1)
+  pos = skipWs(str, pos)
+  if pos <= #str then return nil, "trailing garbage" end
   return value
 end
 

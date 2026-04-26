@@ -62,6 +62,10 @@ end
 -- IMPORTS
 -- ============================================================
 
+-- Ensure fresh JSON library load (clear require cache)
+package.loaded["lib.json"] = nil
+package.loaded["lib.api"] = nil
+
 local api = require("lib.api")
 local deepseek = api.new(apiKey)
 
