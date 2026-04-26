@@ -59,6 +59,24 @@ if not apiKey or apiKey == "sk-your-deepseek-api-key-here" then
 end
 
 -- ============================================================
+-- SYSTEM PROMPT
+-- ============================================================
+
+local systemPrompt = "You are a helpful assistant. Be concise and direct."
+local promptFile = filesystem.concat(scriptDir, "system-prompt.json")
+local promptHandle = io.open(promptFile, "r")
+if promptHandle then
+  local content = promptHandle:read("*a")
+  promptHandle:close()
+  -- Simple JSON parsing: extract "system_prompt" value
+  local sp = content:match('"system_prompt"%s*:%s*"(.-)"')
+  if sp and #sp > 0 then
+    -- Unescape JSON string
+    systemPrompt = sp:gsub('\\"', '"'):gsub('\\n', '\n'):gsub('\\t', '\t'):gsub('\\\\', '\\')
+  end
+end
+
+-- ============================================================
 -- IMPORTS
 -- ============================================================
 
@@ -76,7 +94,7 @@ local deepseek = api.new(apiKey)
 local app = {
   running = true,
   messages = {
-    { role = "system", content = "You are a helpful assistant. Be concise and direct." }
+    { role = "system", content = systemPrompt }
   },
   chatLines = {},
   input = "",
@@ -174,7 +192,7 @@ local function drawHeader()
   gpu.setBackground(C.headerBg)
   gpu.setForeground(C.headerText)
   fillRect(1, 1, app.screenWidth, 1, " ")
-  drawText(2, 1, "OC-chatter v1.0 :: DeepSeek API")
+  drawText(2, 1, "DeepSeek")
   
   local status = app.thinking and "[ Thinking... ]" or "[ Ready ]"
   local sx = app.screenWidth - unicode.wlen(status) - 1
@@ -311,7 +329,7 @@ local function handleKeyDown(code, char)
   elseif code == 203 then -- LEFT arrow: quit
     app.running = false
   elseif code == 205 then -- RIGHT arrow: clear
-    app.messages = { { role = "system", content = "You are a helpful assistant. Be concise and direct." } }
+    app.messages = { { role = "system", content = systemPrompt } }
     app.chatLines = {}
     app.scrollOffset = 0
     fullRedraw()

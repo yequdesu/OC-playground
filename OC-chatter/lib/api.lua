@@ -12,7 +12,7 @@ end
 
 function api:chat(messages)
   local body = json.encode({
-    model = "deepseek-v4-flash",
+    model = "deepseek-chat",
     messages = messages,
     stream = false
   })
