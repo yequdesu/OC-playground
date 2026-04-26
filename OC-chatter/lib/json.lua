@@ -4,10 +4,6 @@ local function escapeString(str)
   return str:gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r'):gsub('\t', '\\t')
 end
 
-local function unescapeString(str)
-  return str:gsub('\\"', '"'):gsub('\\n', '\n'):gsub('\\r', '\r'):gsub('\\t', '\t'):gsub('\\\\', '\\')
-end
-
 function json.encode(value)
   local t = type(value)
   if t == "string" then
@@ -53,21 +49,19 @@ function json.encode(value)
   return "null"
 end
 
--- Forward declarations for decode (circular dependencies)
+-- Forward declarations
 local parseValue, parseString, parseNumber, parseObject, parseArray, skipWhitespace
 
-function skipWhitespace(str, pos)
+skipWhitespace = function(str, pos)
   while pos <= #str do
     local ch = str:sub(pos, pos)
-    if ch ~= " " and ch ~= "\n" and ch ~= "\r" and ch ~= "\t" then
-      break
-    end
+    if ch ~= " " and ch ~= "\n" and ch ~= "\r" and ch ~= "\t" then break end
     pos = pos + 1
   end
   return pos
 end
 
-function parseString(str, pos)
+parseString = function(str, pos)
   pos = pos + 1
   local result = {}
   while pos <= #str do
@@ -93,30 +87,23 @@ function parseString(str, pos)
   return nil, pos, "unterminated string"
 end
 
-function parseNumber(str, pos)
+parseNumber = function(str, pos)
   local startPos = pos
   if str:sub(pos, pos) == '-' then pos = pos + 1 end
-  while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do
-    pos = pos + 1
-  end
+  while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do pos = pos + 1 end
   if str:sub(pos, pos) == '.' then
     pos = pos + 1
-    while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do
-      pos = pos + 1
-    end
+    while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do pos = pos + 1 end
   end
   if str:sub(pos, pos) == 'e' or str:sub(pos, pos) == 'E' then
     pos = pos + 1
     if str:sub(pos, pos) == '+' or str:sub(pos, pos) == '-' then pos = pos + 1 end
-    while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do
-      pos = pos + 1
-    end
+    while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do pos = pos + 1 end
   end
-  local num = tonumber(str:sub(startPos, pos - 1))
-  return num, pos
+  return tonumber(str:sub(startPos, pos - 1)), pos
 end
 
-function parseValue(str, pos)
+parseValue = function(str, pos)
   pos = skipWhitespace(str, pos)
   if pos > #str then return nil, pos, "unexpected end" end
   local ch = str:sub(pos, pos)
@@ -127,31 +114,23 @@ function parseValue(str, pos)
     return parseObject(str, pos)
   elseif ch == '[' then
     return parseArray(str, pos)
-  elseif ch == 't' then
-    if str:sub(pos, pos + 3) == "true" then
-      return true, pos + 4
-    end
-  elseif ch == 'f' then
-    if str:sub(pos, pos + 4) == "false" then
-      return false, pos + 5
-    end
-  elseif ch == 'n' then
-    if str:sub(pos, pos + 3) == "null" then
-      return json.null, pos + 4
-    end
+  elseif ch == 't' and str:sub(pos, pos + 3) == "true" then
+    return true, pos + 4
+  elseif ch == 'f' and str:sub(pos, pos + 4) == "false" then
+    return false, pos + 5
+  elseif ch == 'n' and str:sub(pos, pos + 3) == "null" then
+    return json.null, pos + 4
   elseif ch == '-' or (ch >= '0' and ch <= '9') then
     return parseNumber(str, pos)
   end
   return nil, pos, "unexpected character: " .. ch
 end
 
-function parseObject(str, pos)
+parseObject = function(str, pos)
   pos = pos + 1
   local obj = {}
   pos = skipWhitespace(str, pos)
-  if str:sub(pos, pos) == '}' then
-    return obj, pos + 1
-  end
+  if str:sub(pos, pos) == '}' then return obj, pos + 1 end
   while true do
     pos = skipWhitespace(str, pos)
     local key, keyEnd = parseString(str, pos)
@@ -160,27 +139,20 @@ function parseObject(str, pos)
     if str:sub(pos, pos) ~= ':' then return nil, pos, "expected colon" end
     pos = pos + 1
     local value, valueEnd = parseValue(str, pos)
-    if not value and valueEnd then return nil, valueEnd, "expected value" end
     obj[key] = (value == json.null) and nil or value
     pos = skipWhitespace(str, valueEnd)
     local ch = str:sub(pos, pos)
-    if ch == '}' then
-      return obj, pos + 1
-    elseif ch == ',' then
-      pos = pos + 1
-    else
-      return nil, pos, "expected comma or closing brace"
-    end
+    if ch == '}' then return obj, pos + 1
+    elseif ch == ',' then pos = pos + 1
+    else return nil, pos, "expected comma or closing brace" end
   end
 end
 
-function parseArray(str, pos)
+parseArray = function(str, pos)
   pos = pos + 1
   local arr = {}
   pos = skipWhitespace(str, pos)
-  if str:sub(pos, pos) == ']' then
-    return arr, pos + 1
-  end
+  if str:sub(pos, pos) == ']' then return arr, pos + 1 end
   local i = 1
   while true do
     local value, valueEnd = parseValue(str, pos)
@@ -188,15 +160,13 @@ function parseArray(str, pos)
     i = i + 1
     pos = skipWhitespace(str, valueEnd)
     local ch = str:sub(pos, pos)
-    if ch == ']' then
-      return arr, pos + 1
-    elseif ch == ',' then
-      pos = pos + 1
-    else
-      return nil, pos, "expected comma or closing bracket"
-    end
+    if ch == ']' then return arr, pos + 1
+    elseif ch == ',' then pos = pos + 1
+    else return nil, pos, "expected comma or closing bracket" end
   end
 end
+
+json.null = {}
 
 function json.decode(str)
   if type(str) ~= "string" then return nil, "expected string" end
@@ -205,7 +175,5 @@ function json.decode(str)
   if pos <= #str then return nil, "trailing garbage at position " .. pos end
   return value
 end
-
-json.null = {}
 
 return json

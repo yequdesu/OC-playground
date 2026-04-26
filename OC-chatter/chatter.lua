@@ -70,6 +70,7 @@ local deepseek = api.new(apiKey)
 -- ============================================================
 
 local app = {
+  running = true,
   messages = {
     { role = "system", content = "You are a helpful assistant. Be concise and direct." }
   },
@@ -291,7 +292,7 @@ local function handleKeyDown(code, char)
       app.input = unicode.sub(app.input, 1, -2)
     end
   elseif code == 203 then -- LEFT arrow: quit
-    os.exit(0)
+    app.running = false
   elseif code == 205 then -- RIGHT arrow: clear
     app.messages = { { role = "system", content = "You are a helpful assistant. Be concise and direct." } }
     app.chatLines = {}
@@ -340,7 +341,7 @@ local function init()
   clearScreen()
   fullRedraw()
   
-  while true do
+  while app.running do
     local e1, e2, e3, e4, e5 = event.pull(0.1)
     if e1 then
       if e1 == "key_down" then
@@ -351,11 +352,9 @@ local function init()
       fullRedraw()
     end
   end
+  
+  term.clear()
+  os.exit(0)
 end
 
-local ok, err = pcall(init)
-if not ok then
-  term.clear()
-  print("Fatal error: " .. tostring(err))
-  print(debug.traceback())
-end
+init()
