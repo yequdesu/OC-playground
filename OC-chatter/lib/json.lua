@@ -53,7 +53,10 @@ function json.encode(value)
   return "null"
 end
 
-local function skipWhitespace(str, pos)
+-- Forward declarations for decode (circular dependencies)
+local parseValue, parseString, parseNumber, parseObject, parseArray, skipWhitespace
+
+function skipWhitespace(str, pos)
   while pos <= #str do
     local ch = str:sub(pos, pos)
     if ch ~= " " and ch ~= "\n" and ch ~= "\r" and ch ~= "\t" then
@@ -64,7 +67,56 @@ local function skipWhitespace(str, pos)
   return pos
 end
 
-local function parseValue(str, pos)
+function parseString(str, pos)
+  pos = pos + 1
+  local result = {}
+  while pos <= #str do
+    local ch = str:sub(pos, pos)
+    if ch == '"' then
+      return table.concat(result), pos + 1
+    elseif ch == '\\' then
+      pos = pos + 1
+      ch = str:sub(pos, pos)
+      if ch == 'n' then result[#result + 1] = '\n'
+      elseif ch == 'r' then result[#result + 1] = '\r'
+      elseif ch == 't' then result[#result + 1] = '\t'
+      elseif ch == 'u' then
+        local hex = str:sub(pos + 1, pos + 4)
+        result[#result + 1] = string.char(tonumber(hex, 16))
+        pos = pos + 4
+      else result[#result + 1] = ch end
+    else
+      result[#result + 1] = ch
+    end
+    pos = pos + 1
+  end
+  return nil, pos, "unterminated string"
+end
+
+function parseNumber(str, pos)
+  local startPos = pos
+  if str:sub(pos, pos) == '-' then pos = pos + 1 end
+  while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do
+    pos = pos + 1
+  end
+  if str:sub(pos, pos) == '.' then
+    pos = pos + 1
+    while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do
+      pos = pos + 1
+    end
+  end
+  if str:sub(pos, pos) == 'e' or str:sub(pos, pos) == 'E' then
+    pos = pos + 1
+    if str:sub(pos, pos) == '+' or str:sub(pos, pos) == '-' then pos = pos + 1 end
+    while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do
+      pos = pos + 1
+    end
+  end
+  local num = tonumber(str:sub(startPos, pos - 1))
+  return num, pos
+end
+
+function parseValue(str, pos)
   pos = skipWhitespace(str, pos)
   if pos > #str then return nil, pos, "unexpected end" end
   local ch = str:sub(pos, pos)
@@ -93,56 +145,7 @@ local function parseValue(str, pos)
   return nil, pos, "unexpected character: " .. ch
 end
 
-local function parseString(str, pos)
-  pos = pos + 1
-  local result = {}
-  while pos <= #str do
-    local ch = str:sub(pos, pos)
-    if ch == '"' then
-      return table.concat(result), pos + 1
-    elseif ch == '\\' then
-      pos = pos + 1
-      ch = str:sub(pos, pos)
-      if ch == 'n' then result[#result + 1] = '\n'
-      elseif ch == 'r' then result[#result + 1] = '\r'
-      elseif ch == 't' then result[#result + 1] = '\t'
-      elseif ch == 'u' then
-        local hex = str:sub(pos + 1, pos + 4)
-        result[#result + 1] = string.char(tonumber(hex, 16))
-        pos = pos + 4
-      else result[#result + 1] = ch end
-    else
-      result[#result + 1] = ch
-    end
-    pos = pos + 1
-  end
-  return nil, pos, "unterminated string"
-end
-
-local function parseNumber(str, pos)
-  local startPos = pos
-  if str:sub(pos, pos) == '-' then pos = pos + 1 end
-  while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do
-    pos = pos + 1
-  end
-  if str:sub(pos, pos) == '.' then
-    pos = pos + 1
-    while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do
-      pos = pos + 1
-    end
-  end
-  if str:sub(pos, pos) == 'e' or str:sub(pos, pos) == 'E' then
-    pos = pos + 1
-    if str:sub(pos, pos) == '+' or str:sub(pos, pos) == '-' then pos = pos + 1 end
-    while pos <= #str and str:sub(pos, pos) >= '0' and str:sub(pos, pos) <= '9' do
-      pos = pos + 1
-    end
-  end
-  local num = tonumber(str:sub(startPos, pos - 1))
-  return num, pos
-end
-
-local function parseObject(str, pos)
+function parseObject(str, pos)
   pos = pos + 1
   local obj = {}
   pos = skipWhitespace(str, pos)
@@ -171,7 +174,7 @@ local function parseObject(str, pos)
   end
 end
 
-local function parseArray(str, pos)
+function parseArray(str, pos)
   pos = pos + 1
   local arr = {}
   pos = skipWhitespace(str, pos)
