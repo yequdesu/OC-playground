@@ -22,21 +22,31 @@ local apiKey = nil
 local configHandle = io.open(configFile, "r")
 if configHandle then
   for line in configHandle:lines() do
-    local key, value = line:match("^api_key%s*=%s*\"(.*)\"$")
-    if key and value then
+    -- Strip comments
+    line = line:gsub("%s*#.*$", "")
+    if #line == 0 then goto continue end
+    
+    -- Try quoted value: api_key = "xxx"
+    local value = line:match('^api_key%s*=%s*"(.*)"$')
+    if value then
       apiKey = value
       break
     end
-    key, value = line:match("^api_key%s*=%s*'([^']*)'$")
-    if key and value then
+    
+    -- Try single-quoted: api_key = 'xxx'
+    value = line:match("^api_key%s*=%s*'([^']*)'$")
+    if value then
       apiKey = value
       break
     end
-    key, value = line:match("^api_key%s*=%s*(.+)$")
-    if key and value then
-      apiKey = value:gsub("^%s+", ""):gsub("%s+$", "")
+    
+    -- Try unquoted: api_key = xxx
+    value = line:match("^api_key%s*=%s*(%S+)$")
+    if value then
+      apiKey = value
       break
     end
+    ::continue::
   end
   configHandle:close()
 end
