@@ -5,13 +5,13 @@ local term = require("term")
 local computer = require("computer")
 local unicode = require("unicode")
 local filesystem = require("filesystem")
-local shell = require("shell")
 
 -- ============================================================
 -- CONFIG
 -- ============================================================
 
-local scriptDir = filesystem.path(shell.getRunningProgram())
+local filepath = (...)
+local scriptDir = filesystem.path(filepath)
 local configFile = filesystem.concat(scriptDir, "config.cfg")
 
 local apiKey = nil
