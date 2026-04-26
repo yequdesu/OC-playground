@@ -11,7 +11,11 @@ local filesystem = require("filesystem")
 -- ============================================================
 
 local filepath = (...)
-local scriptDir = filesystem.path(filepath)
+local scriptDir = (type(filepath) == "string") and filesystem.path(filepath) or "."
+
+-- Add script directory to package path for local requires
+package.path = package.path .. ";" .. filesystem.concat(scriptDir, "?.lua") .. ";" .. filesystem.concat(scriptDir, "?/init.lua")
+
 local configFile = filesystem.concat(scriptDir, "config.cfg")
 
 local apiKey = nil
