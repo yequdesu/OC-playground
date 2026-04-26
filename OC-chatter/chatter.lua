@@ -116,17 +116,26 @@ local C = {
 local function wordWrap(text, maxWidth)
   local lines = {}
   local line = ""
-  for word in text:gmatch("%S+") do
-    if unicode.wlen(line) + unicode.wlen(word) + 1 > maxWidth then
-      if #line > 0 then
+  local i = 1
+  while i <= #text do
+    local char = unicode.sub(text, i, i)
+    local charWidth = unicode.wlen(char)
+    local lineWidth = unicode.wlen(line)
+    
+    if char == " " and lineWidth == 0 then
+      i = i + 1
+    elseif lineWidth + charWidth > maxWidth then
+      if lineWidth > 0 then
         table.insert(lines, line)
-        line = word
+        line = char
+        i = i + 1
       else
-        table.insert(lines, word)
-        line = ""
+        table.insert(lines, char)
+        i = i + 1
       end
     else
-      line = (#line > 0 and line .. " " or "") .. word
+      line = (#line > 0 and line .. "" or "") .. char
+      i = i + 1
     end
   end
   if #line > 0 then table.insert(lines, line) end
@@ -192,13 +201,15 @@ local function appendChat(role, content)
   local label = (role == "user") and "You: " or "DeepSeek: "
   local labelColor = (role == "user") and C.userLabel or C.aiLabel
   local prefixWidth = unicode.wlen(label)
-  local textWidth = app.screenWidth - 2 - prefixWidth
+  local textWidth = app.screenWidth - 3 - prefixWidth
+  if textWidth < 5 then textWidth = 5 end
   
   local wrapped = wrapLines(content, textWidth)
   for i, wline in ipairs(wrapped) do
     table.insert(app.chatLines, {
-      text = (i == 1) and wline or wline,
+      text = wline,
       prefix = (i == 1) and label or nil,
+      indent = (i == 1) and prefixWidth or prefixWidth,
       color = labelColor
     })
   end
@@ -220,12 +231,14 @@ local function drawChatArea()
       gpu.setForeground(entry.color)
       drawText(2, startY + y - 1, entry.prefix)
       gpu.setForeground(C.text)
-      drawText(2 + unicode.wlen(entry.prefix), startY + y - 1, entry.text)
+      local textStart = 2 + unicode.wlen(entry.prefix)
+      drawText(textStart, startY + y - 1, entry.text)
     else
       gpu.setForeground(C.dim)
       gpu.setBackground(C.bg)
       if #entry.text > 0 then
-        drawText(2 + unicode.wlen("DeepSeek: "), startY + y - 1, entry.text)
+        local textStart = 2 + (entry.indent or 10)
+        drawText(textStart, startY + y - 1, entry.text)
       end
     end
   end
