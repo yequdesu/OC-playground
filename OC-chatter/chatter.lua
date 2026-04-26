@@ -176,7 +176,7 @@ local function drawStatusBar()
   local leftHint = "Enter: Send  Esc: Quit  Ctrl+L: Clear  Up/Down: Scroll"
   drawText(2, y, leftHint)
   
-  local rightInfo = app.chatLines > 0 and (#app.messages - 1) .. " msgs" or "New"
+  local rightInfo = #app.chatLines > 0 and (#app.messages - 1) .. " msgs" or "New"
   local rx = app.screenWidth - unicode.wlen(rightInfo) - 1
   drawText(rx, y, rightInfo)
 end
