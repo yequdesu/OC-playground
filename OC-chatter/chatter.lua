@@ -173,7 +173,7 @@ local function drawStatusBar()
   gpu.setForeground(C.textSecondary)
   fillRect(1, y, app.screenWidth, 1, " ")
   
-  local leftHint = "Enter: Send  Esc: Quit  Ctrl+L: Clear  Up/Down: Scroll"
+  local leftHint = "Enter: Send  LEFT: Quit  RIGHT: Clear  Up/Down: Scroll"
   drawText(2, y, leftHint)
   
   local rightInfo = #app.chatLines > 0 and (#app.messages - 1) .. " msgs" or "New"
@@ -290,36 +290,43 @@ local function handleKeyDown(code, char)
     if #app.input > 0 then
       app.input = unicode.sub(app.input, 1, -2)
     end
-  elseif code == 1 or code == 59 then -- Escape or F1
+  elseif code == 203 then -- LEFT arrow: quit
     os.exit(0)
-  elseif code == 38 and #app.input == 0 then -- L key for clear
+  elseif code == 205 then -- RIGHT arrow: clear
     app.messages = { { role = "system", content = "You are a helpful assistant. Be concise and direct." } }
     app.chatLines = {}
     app.scrollOffset = 0
     fullRedraw()
-  elseif code == 200 then -- Up arrow
+  elseif code == 200 then -- Up arrow: scroll up
     app.scrollOffset = math.max(0, app.scrollOffset - 3)
     fullRedraw()
-  elseif code == 208 then -- Down arrow
-    app.scrollOffset = math.min(#app.chatLines - app.screenHeight + 2, app.scrollOffset + 3)
-    if app.scrollOffset < 0 then app.scrollOffset = 0 end
+  elseif code == 208 then -- Down arrow: scroll down
+    local maxScroll = #app.chatLines - app.screenHeight + 2
+    if maxScroll < 0 then maxScroll = 0 end
+    app.scrollOffset = math.min(maxScroll, app.scrollOffset + 3)
     fullRedraw()
   else
-    -- Character input
-    if char and type(char) == "string" and #char > 0 then
-      app.input = app.input .. char
+    -- Character input — handle both string and number
+    local inputChar = ""
+    if type(char) == "string" and #char > 0 then
+      inputChar = char
+    elseif type(char) == "number" and char >= 32 then
+      inputChar = string.char(char)
+    end
+    if #inputChar > 0 then
+      app.input = app.input .. inputChar
     end
   end
 end
 
 local function handleScroll(dir)
+  local maxScroll = #app.chatLines - app.screenHeight + 2
+  if maxScroll < 0 then maxScroll = 0 end
   if dir > 0 then
     app.scrollOffset = math.max(0, app.scrollOffset - 1)
   else
-    app.scrollOffset = math.min(#app.chatLines - app.screenHeight + 2, app.scrollOffset + 1)
-    if app.scrollOffset < 0 then app.scrollOffset = 0 end
+    app.scrollOffset = math.min(maxScroll, app.scrollOffset + 1)
   end
-  fullRedraw()
 end
 
 -- ============================================================
